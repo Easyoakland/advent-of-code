@@ -33,7 +33,7 @@ mod part1 {
     pub fn run(file: &str) -> Result<u32, Box<dyn Error>> {
         let input_str = fs::read_to_string(file)?;
         let input = Span::new(&input_str);
-        let monkey_res = parse::parse_input::<u8, ErrorTree<Span>>(input);
+        let monkey_res = parse_input::<ErrorTree<Span>>(input);
         let monkeys = match monkey_res {
             Ok(monkeys) => monkeys,
             Err(nom::Err::Error(e)) => {

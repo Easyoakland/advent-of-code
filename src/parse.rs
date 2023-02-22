@@ -99,7 +99,7 @@ where
     }
 }
 
-fn parse_monkey<'a, T, E>(i: Span<'a>) -> IResult<Span<'a>, Monkey, E>
+fn parse_monkey<'a, E>(i: Span<'a>) -> IResult<Span<'a>, Monkey, E>
 where
     E: ParseError<Span<'a>>,
 {
@@ -125,9 +125,9 @@ where
     ))
 }
 
-pub fn parse_input<'a, T, E>(input: Span<'a>) -> IResult<Span<'a>, Vec<Monkey>, E>
+pub fn parse_input<'a, E>(input: Span<'a>) -> IResult<Span<'a>, Vec<Monkey>, E>
 where
     E: ParseError<Span<'a>>,
 {
-    all_consuming(separated_list1(line_ending, parse_monkey::<'a, T, E>))(input)
+    all_consuming(separated_list1(line_ending, parse_monkey::<'a, E>))(input)
 }
