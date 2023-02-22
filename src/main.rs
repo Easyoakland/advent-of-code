@@ -54,7 +54,7 @@ mod part1 {
                     GenericErrorTree::Stack { .. } => unimplemented!(),
                     GenericErrorTree::Alt(_) => unimplemented!(),
                 }
-                return Err("parse thing")?;
+                return Err("Parsing error")?;
             }
             Err(nom::Err::Incomplete(_)) | Err(nom::Err::Failure(_)) => todo!(),
         };

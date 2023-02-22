@@ -80,10 +80,7 @@ where
     E: ParseError<Span<'a>>,
 {
     let (i, (op, r)) = tuple((
-        preceded(
-            tag("  Operation: new =   Operation: new = old "),
-            one_of("*+"),
-        ),
+        preceded(tag("  Operation: new = old "), one_of("*+")),
         preceded(space1, alt((digit1, tag("old")))),
     ))(i)?;
     let (i, _) = line_ending(i)?;
@@ -106,7 +103,7 @@ fn parse_monkey<'a, T, E>(i: Span<'a>) -> IResult<Span<'a>, Monkey, E>
 where
     E: ParseError<Span<'a>>,
 {
-    let (i, _) = tuple((tag("Monkey"), terminated(digit1, char(':'))))(i)?;
+    let (i, _) = tuple((tag("Monkey "), terminated(digit1, char(':'))))(i)?;
     let (i, _) = line_ending(i)?;
     let (i, starting_items) = starting_items(i)?;
     let (i, op) = operation(i)?;
