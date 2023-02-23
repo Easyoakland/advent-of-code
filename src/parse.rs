@@ -1,3 +1,4 @@
+use crate::data::{Monkey, Operation};
 use miette::GraphicalReportHandler;
 use nom::{
     branch::alt,
@@ -6,7 +7,7 @@ use nom::{
         complete::{self as cc, char, digit1, line_ending, one_of},
         streaming::space1,
     },
-    combinator::{all_consuming, cut, eof, opt},
+    combinator::{all_consuming, cut, eof},
     error::{context, ContextError, ParseError},
     multi::{many1, separated_list1},
     sequence::{preceded, terminated, tuple},
@@ -21,48 +22,9 @@ use nom_supreme::{
     error::{BaseErrorKind, ErrorTree, GenericErrorTree},
     tag::{complete::tag, TagError},
 };
-use std::{
-    error::Error,
-    fmt::Debug,
-    num::ParseIntError,
-    ops::RangeFrom,
-    str::{self, FromStr},
-};
+use std::{error::Error, fmt::Debug, ops::RangeFrom, str};
 
 pub type Span<'a> = LocatedSpan<&'a str>;
-
-#[derive(Debug)]
-pub enum Value {
-    Old,
-    Num(u8),
-}
-
-impl FromStr for Value {
-    type Err = ParseIntError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "old" => Ok(Value::Old),
-            x => Ok(Value::Num(x.parse()?)),
-        }
-    }
-}
-
-// Left value of operation is always `Old`
-#[derive(Debug)]
-pub enum Operation {
-    Mul(Value),
-    Add(Value),
-}
-
-#[derive(Debug)]
-pub struct Monkey {
-    starting_items: Vec<u8>,
-    op: Operation,
-    test_divisor: u8,
-    test_true_target: usize,
-    test_false_target: usize,
-}
 
 fn digit1_to_num<'a, I, O, E>(i: I) -> IResult<I, O, E>
 where

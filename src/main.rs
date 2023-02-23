@@ -1,5 +1,6 @@
 use std::{error::Error, fs};
 
+mod data;
 mod parse;
 use parse::{parse_final, Span};
 
