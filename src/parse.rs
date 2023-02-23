@@ -134,7 +134,7 @@ struct BadInput<'a> {
     kind: BaseErrorKind<&'a str, Box<dyn std::error::Error + Send + Sync>>,
 }
 
-pub fn parse_final(input: Span<'static>) -> Result<Vec<Monkey>, Box<dyn Error>> {
+pub fn parse_final(input: Span<'static>) -> Result<Vec<Monkey>, Box<dyn Error + Send + Sync>> {
     let monkey_res = parse_input::<ErrorTree<Span>>(input);
     let monkeys_handled_res = match monkey_res {
         Ok(monkeys) => monkeys,
