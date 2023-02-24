@@ -1,10 +1,13 @@
+use cord::{offset_to_cord, Cord};
 use ndarray::Array2;
 use std::{
+    collections::{HashMap, HashSet},
     error::Error,
     fs::File,
     io::{BufRead, BufReader},
-    ops::{Add, AddAssign, Sub},
+    ops::Sub,
 };
+mod cord;
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Part 1 answer: {:#?}", part1::run("input.txt")?);
@@ -14,66 +17,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 mod part1 {
     use super::*;
-    pub fn run(file_name: &str) -> Result<u32, Box<dyn Error>> {
-        let mut result = 0;
-
+    pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
         let (start, end, state) = parse(file_name)?;
-        for elem in state.indexed_iter() {
-            // print!("{:?}", elem);
-        }
-        Ok(result)
+        Ok(dft_unweighted_astar(start, end, state).unwrap())
     }
-}
-
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct Cord(usize, usize);
-
-impl Cord {
-    fn op1(self, f: fn(usize) -> usize) -> Self {
-        Cord(f(self.0), f(self.1))
-    }
-    fn op2<T: Into<usize>>(self, rhs: Self, f: fn(usize, usize) -> T) -> Self {
-        Cord(f(self.0, rhs.0).into(), f(self.1, rhs.1).into())
-    }
-    fn op2_refutable<T: Into<Option<usize>>>(
-        self,
-        rhs: Self,
-        f: fn(usize, usize) -> T,
-    ) -> Option<Self> {
-        let x = f(self.0, rhs.0).into()?;
-        let y = f(self.1, rhs.1).into()?;
-        Some(Cord(x, y))
-    }
-    fn manhattan_distance(self, other: &Self) -> u32 {
-        let temp = self.op2(*other, usize::sub);
-        (temp.0 + temp.1).try_into().unwrap()
-    }
-}
-
-impl Add<Self> for Cord {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self::Output {
-        self.op2(rhs, usize::add)
-    }
-}
-
-impl AddAssign<Self> for Cord {
-    fn add_assign(&mut self, other: Self) {
-        *self = *self + other;
-    }
-}
-
-impl Sub<Self> for Cord {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self::Output {
-        self.op2(rhs, usize::sub)
-    }
-}
-
-fn offset_to_cord(offset: usize, width: usize) -> Cord {
-    let y = offset / width;
-    let x = offset - width * y;
-    Cord(x, y)
 }
 
 fn parse(file_name: &str) -> Result<(Cord, Cord, Array2<u8>), Box<dyn Error>> {
@@ -99,14 +46,14 @@ fn parse(file_name: &str) -> Result<(Cord, Cord, Array2<u8>), Box<dyn Error>> {
         .iter()
         .enumerate()
         .map(|(o, c)| match c {
-            'a'..='z' => (*c as u8) - ('a' as u8),
+            'a'..='z' => (*c as u8) - (b'a'),
             'S' => {
                 start_offset = o;
                 0
             }
             'E' => {
                 end_offset = o;
-                'z' as u8 - 'a' as u8
+                b'z' - b'a'
             }
             _ => panic!("Other values invalid."),
         })
@@ -120,7 +67,54 @@ fn parse(file_name: &str) -> Result<(Cord, Cord, Array2<u8>), Box<dyn Error>> {
     ))
 }
 
-fn dfs(start: Cord, end: Cord, input: Array2<u8>) {}
+fn dft_unweighted_astar(start: Cord, end: Cord, input: Array2<u8>) -> Option<usize> {
+    // Defining potential
+    let potential = |node: Cord| node.manhattan_distance(&end);
+
+    // Dijkstra
+    let mut boundary_nodes = HashSet::from([start]);
+    let mut distances = HashMap::from([(start, 0usize)]);
+
+    while !boundary_nodes.is_empty() {
+        // Remove closest node defined by distance + potential of node.
+        let cur_node = *boundary_nodes
+            .iter()
+            .min_by_key(|&&x| distances[&x] + potential(x))
+            .unwrap();
+        boundary_nodes.remove(&cur_node);
+
+        // If the end is reached return the distance to the end.
+        if cur_node == end {
+            return Some(distances[&end]);
+        }
+
+        // Increase scope of neighbors to neighbors of `cur_node`
+        for neighbor in cur_node.neumann_neighborhood(1, input.dim().1, input.dim().0) {
+            // NEW for advent of code
+            // Confirm that neighbor is valid (height difference is <= 1 greater before continuing.
+            // Index is (row,column) not (x,y) or (column, row). See above for loop and below line.
+            if input[[neighbor.1, neighbor.0]] > input[[cur_node.1, cur_node.0]]
+                && input[[neighbor.1, neighbor.0]].sub(input[[cur_node.1, cur_node.0]]) > 1
+            {
+                continue;
+            }
+
+            // +1 because all edge lengths are 1 on unweighted 2d grid.
+            // On weighted graph would be the weight of the edge between cur_node and neighbor.
+            let proposed_distance = distances[&cur_node] + 1;
+
+            // If don't already have a distance for the specified node or if the new distance is shorter
+            // replace/insert the new distance for the neighbor
+            if !distances.contains_key(&neighbor) || proposed_distance < distances[&neighbor] {
+                distances.insert(neighbor, proposed_distance);
+                boundary_nodes.insert(neighbor);
+            }
+        }
+    }
+
+    // If not found after full search then no distance.
+    None
+}
 
 #[cfg(test)]
 mod tests {
@@ -133,10 +127,50 @@ mod tests {
     }
 
     #[test]
+    fn part1_ans() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part1::run("input.txt")?, 534);
+        Ok(())
+    }
+
+    #[test]
+    fn test_test_parse() -> Result<(), Box<dyn Error>> {
+        let out = parse("inputtest.txt")?;
+        assert_eq!(out.0, Cord(0, 0));
+        assert_eq!(out.1, Cord(5, 2));
+        println!(
+            "{}",
+            out.2
+                .indexed_iter()
+                .map(|((_, y), v)| {
+                    if y != out.2.dim().1 - 1 {
+                        String::from((v + 'a' as u8) as char)
+                    } else {
+                        format!("{}{}", (v + 'a' as u8) as char, '\n')
+                    }
+                })
+                .collect::<String>()
+        );
+        Ok(())
+    }
+
+    #[test]
     fn test_parse() -> Result<(), Box<dyn Error>> {
         let out = parse("input.txt")?;
         assert_eq!(out.0, Cord(0, 20));
         assert_eq!(out.1, Cord(138, 20));
+        println!(
+            "{}",
+            out.2
+                .indexed_iter()
+                .map(|((_, y), v)| {
+                    if y != out.2.dim().1 - 1 {
+                        String::from((v + 'a' as u8) as char)
+                    } else {
+                        format!("{}{}", (v + 'a' as u8) as char, '\n')
+                    }
+                })
+                .collect::<String>()
+        );
         Ok(())
     }
 }
