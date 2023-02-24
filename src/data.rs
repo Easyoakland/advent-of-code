@@ -24,7 +24,7 @@ pub enum Operation {
     Add(Value),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Monkey {
     pub items: Vec<u64>,
     pub op: Operation,
