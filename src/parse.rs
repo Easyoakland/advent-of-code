@@ -49,7 +49,7 @@ where
         // Both cases fail parsing.
         Err(_) => {
             return Err(nom::Err::Failure(E::from_error_kind(
-                input.clone(),
+                input,
                 nom::error::ErrorKind::Fail,
             )));
         }
