@@ -1,6 +1,6 @@
 use std::{num::ParseIntError, str::FromStr};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Old,
     Num(u8),
@@ -18,7 +18,7 @@ impl FromStr for Value {
 }
 
 // Left value of operation is always `Old`
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Operation {
     Mul(Value),
     Add(Value),
@@ -26,7 +26,7 @@ pub enum Operation {
 
 #[derive(Debug)]
 pub struct Monkey {
-    pub starting_items: Vec<u8>,
+    pub items: Vec<u64>,
     pub op: Operation,
     pub test_divisor: u8,
     pub test_true_target: usize,

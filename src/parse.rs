@@ -4,7 +4,7 @@ use nom::{
     branch::alt,
     // bytes::complete::tag,
     character::{
-        complete::{self as cc, char, digit1, line_ending, one_of},
+        complete::{char, digit1, line_ending, one_of},
         streaming::space1,
     },
     combinator::{all_consuming, cut, eof},
@@ -13,38 +13,58 @@ use nom::{
     sequence::{preceded, terminated, tuple},
     AsChar,
     IResult,
-    InputIter,
-    InputLength,
-    Slice,
+    InputTakeAtPosition,
 };
 use nom_locate::LocatedSpan;
 use nom_supreme::{
     error::{BaseErrorKind, ErrorTree, GenericErrorTree},
     tag::{complete::tag, TagError},
 };
-use std::{error::Error, fmt::Debug, ops::RangeFrom, str};
+use std::{
+    clone::Clone,
+    error::Error,
+    fmt::Debug,
+    ops::Deref,
+    str::{self, FromStr},
+};
 
 pub type Span<'a> = LocatedSpan<&'a str>;
 
 fn digit1_to_num<'a, I, O, E>(i: I) -> IResult<I, O, E>
 where
-    O: From<u8>,
-    I: InputIter + Slice<RangeFrom<usize>> + InputLength,
-    <I as InputIter>::Item: AsChar,
-    E: ParseError<I>,
+    O: FromStr,                               // To convert from digit1's string to value.
+    I: Clone + Deref<Target = &'a str>, // Needed to clone input for errors and must be able to deref into &str for parsing from &str.
+    I: InputTakeAtPosition,             // Needed for `digit1`.
+    <I as InputTakeAtPosition>::Item: AsChar, // Needed for `digit1`.
+    E: ParseError<I>,                   // Generic over error type.
 {
-    // Extra trait required by below makes it very hard to use in tuple and preceded etc.
-    // map_res(digit1, |s: I| s.into().parse::<O>())(i)
-    cc::u8(i).map(|(input, out)| (input, out.into()))
+    // Alternatively could use below but not generic over output.
+    // cc::u8(i).map(|(input, out)| (input, out.into()))
+
+    // Using below because `map_res` doesn't seem to work.
+    let (input, out) = digit1(i)?;
+    let out = match (*out).parse::<O>() {
+        Ok(x) => x,
+        // If there is FromStr error either the output type can't be parsed from digits or can't fit.
+        // Both cases fail parsing.
+        Err(_) => {
+            return Err(nom::Err::Failure(E::from_error_kind(
+                input.clone(),
+                nom::error::ErrorKind::Fail,
+            )));
+        }
+    };
+    Ok((input, out))
 }
 
-fn starting_items<'a, E>(i: Span<'a>) -> IResult<Span<'a>, Vec<u8>, E>
+fn starting_items<'a, O, E>(i: Span<'a>) -> IResult<Span<'a>, Vec<O>, E>
 where
     E: ParseError<Span<'a>> + TagError<Span<'a>, &'a str>,
+    O: FromStr,
 {
     let (i, starting_items) = preceded(
         tag("  Starting items: "),
-        separated_list1(tag(", "), digit1_to_num),
+        separated_list1(tag(", "), digit1_to_num::<Span<'a>, O, _>),
     )(i)?;
     let (i, _) = line_ending(i)?;
     Ok((i, starting_items))
@@ -91,7 +111,7 @@ where
     Ok((
         i,
         Monkey {
-            starting_items,
+            items: starting_items,
             op,
             test_divisor,
             test_false_target,
