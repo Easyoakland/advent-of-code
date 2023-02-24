@@ -11,15 +11,35 @@ mod cord;
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Part 1 answer: {:#?}", part1::run("input.txt")?);
-    // println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
+    println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
     Ok(())
 }
 
 mod part1 {
+
     use super::*;
     pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
         let (start, end, state) = parse(file_name)?;
-        Ok(dft_unweighted_astar(start, end, state).unwrap())
+        Ok(dft_unweighted_astar(start, end, &state).unwrap())
+    }
+}
+
+mod part2 {
+    use super::*;
+    pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
+        let (_, end, state) = parse(file_name)?;
+        // Make every `a` level position the start position of the search.
+        let mut min = usize::MAX;
+        for (i, &elem) in state.iter().enumerate() {
+            if elem == 0 {
+                let start = offset_to_cord(i, state.dim().1);
+                min = min.min(match dft_unweighted_astar(start, end, &state) {
+                    Some(x) => x,
+                    None => usize::MAX, // max distance if unreachable from here
+                });
+            }
+        }
+        Ok(min)
     }
 }
 
@@ -67,7 +87,7 @@ fn parse(file_name: &str) -> Result<(Cord, Cord, Array2<u8>), Box<dyn Error>> {
     ))
 }
 
-fn dft_unweighted_astar(start: Cord, end: Cord, input: Array2<u8>) -> Option<usize> {
+fn dft_unweighted_astar(start: Cord, end: Cord, input: &Array2<u8>) -> Option<usize> {
     // Defining potential
     let potential = |node: Cord| node.manhattan_distance(&end);
 
@@ -77,6 +97,9 @@ fn dft_unweighted_astar(start: Cord, end: Cord, input: Array2<u8>) -> Option<usi
 
     while !boundary_nodes.is_empty() {
         // Remove closest node defined by distance + potential of node.
+        // + potential(x) takes so long it actually makes performance worse. I'm leaving it so I can use this as notes for astar.
+        // it does cause less node checks total (by small amount) but actual time is 4x higher instead of 10 less comparisons out of ~6540.
+        // Maybe heuristic is bad? (cliff geography massively changes shortest path to a spiral)
         let cur_node = *boundary_nodes
             .iter()
             .min_by_key(|&&x| distances[&x] + potential(x))
@@ -121,18 +144,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_part1() -> Result<(), Box<dyn Error>> {
-        assert_eq!(part1::run("inputtest.txt")?, 31);
-        Ok(())
-    }
-
-    #[test]
-    fn part1_ans() -> Result<(), Box<dyn Error>> {
-        assert_eq!(part1::run("input.txt")?, 534);
-        Ok(())
-    }
-
-    #[test]
     fn test_test_parse() -> Result<(), Box<dyn Error>> {
         let out = parse("inputtest.txt")?;
         assert_eq!(out.0, Cord(0, 0));
@@ -171,6 +182,30 @@ mod tests {
                 })
                 .collect::<String>()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_part1() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part1::run("inputtest.txt")?, 31);
+        Ok(())
+    }
+
+    #[test]
+    fn part1_ans() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part1::run("input.txt")?, 534);
+        Ok(())
+    }
+
+    #[test]
+    fn test_part2() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part2::run("inputtest.txt")?, 29);
+        Ok(())
+    }
+
+    #[test]
+    fn part2_ans() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part2::run("input.txt")?, 525);
         Ok(())
     }
 }
