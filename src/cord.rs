@@ -13,10 +13,14 @@ pub fn abs_diff<T: Sub<T, Output = T> + PartialOrd>(x: T, y: T) -> T {
     }
 }
 
+pub trait CordData: PrimInt + Zero {}
+
+impl<T: PrimInt + Zero> CordData for T {}
+
 #[allow(dead_code)]
 impl<Datatype> Cord<Datatype>
 where
-    Datatype: PrimInt + Zero,
+    Datatype: CordData,
 {
     pub fn op1(self, f: fn(Datatype) -> Datatype) -> Self {
         Cord(f(self.0), f(self.1))
@@ -104,33 +108,33 @@ where
     }
 }
 
-impl<T: PrimInt + Zero> Add for Cord<T> {
+impl<T: CordData> Add for Cord<T> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
         self.op2(rhs, T::add)
     }
 }
 
-impl<T: PrimInt + Zero> AddAssign<Self> for Cord<T> {
+impl<T: CordData> AddAssign<Self> for Cord<T> {
     fn add_assign(&mut self, other: Self) {
         *self = *self + other;
     }
 }
 
-impl<T: PrimInt + Zero> Sub<Self> for Cord<T> {
+impl<T: CordData> Sub<Self> for Cord<T> {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
         self.op2(rhs, T::sub)
     }
 }
 
-impl<T: PrimInt + Zero> SubAssign<Self> for Cord<T> {
+impl<T: CordData> SubAssign<Self> for Cord<T> {
     fn sub_assign(&mut self, other: Self) {
         *self = *self - other;
     }
 }
 
-impl<T: PrimInt + Zero> From<(T, T)> for Cord<T> {
+impl<T: CordData> From<(T, T)> for Cord<T> {
     fn from(value: (T, T)) -> Self {
         Cord(value.0, value.1)
     }
@@ -144,7 +148,7 @@ impl<T> From<Cord<T>> for (T, T) {
 
 pub fn offset_to_cord<T>(offset: T, width: T) -> Cord<T>
 where
-    T: std::ops::Div<Output = T> + std::ops::Mul<Output = T> + std::ops::Sub<Output = T>,
+    T: std::ops::Div<Output = T> + std::ops::Mul<Output = T> + std::ops::Sub<Output = T> + Copy,
 {
     let y = offset / width;
     let x = offset - width * y;

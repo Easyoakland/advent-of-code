@@ -1,4 +1,4 @@
-use crate::cord::Cord;
+use crate::cord::{Cord, CordData};
 use nom::{
     bytes::complete::tag,
     character::complete::{digit1, line_ending},
@@ -38,15 +38,15 @@ where
 498,4 -> 498,6 -> 496,6
 503,4 -> 502,4 -> 502,9 -> 494,9
 */
-fn cord(input: &str) -> IResult<&str, Cord<isize>> {
+fn cord<T: CordData + FromStr>(input: &str) -> IResult<&str, Cord<T>> {
     let (input, (x, y)) = separated_pair(parse_from(digit1), tag(","), parse_from(digit1))(input)?;
     Ok((input, Cord(x, y)))
 }
 
-fn cords(input: &str) -> IResult<&str, Vec<isize>> {
+fn cords<T: CordData + FromStr>(input: &str) -> IResult<&str, Vec<Cord<T>>> {
     separated_list1(tag(" -> "), cord)(input)
 }
 
-pub fn parse_input(input: &str) -> IResult<&str, Vec<Vec<isize>>> {
+pub fn parse_input<T: CordData + FromStr>(input: &str) -> IResult<&str, Vec<Vec<Cord<T>>>> {
     all_consuming(terminated(separated_list1(line_ending, cords), line_ending))(input)
 }

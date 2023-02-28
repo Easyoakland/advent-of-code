@@ -10,11 +10,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 mod part1 {
-    use std::collections::HashSet;
-
-    use ndarray::Array2;
-
     use crate::cord::Cord;
+    use std::collections::HashSet;
 
     use super::*;
     pub fn run(file: &str) -> Result<usize, Box<dyn Error>> {
@@ -23,7 +20,7 @@ mod part1 {
         let (_, parsed_input) = parse::parse_input(input)?;
 
         // Add all positions of any rock to the rocks set.
-        let mut rocks: HashSet<Cord> = HashSet::new();
+        let mut rocks: HashSet<Cord<isize>> = HashSet::new();
         for connected in parsed_input {
             for cord_pair in connected.windows(2) {
                 rocks.extend(&cord_pair[0].interpolate(&cord_pair[1]));
@@ -41,7 +38,7 @@ mod tests {
     fn test_part1_out_parse() -> Result<(), Box<dyn Error>> {
         let input_str = fs::read_to_string("inputtest.txt")?;
         let input = Box::leak(Box::new(input_str));
-        let (_, parsed_input) = parse::parse_input(input)?;
+        let (_, parsed_input) = parse::parse_input::<isize>(input)?;
         dbg!(parsed_input);
         Ok(())
     }
