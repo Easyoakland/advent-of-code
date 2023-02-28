@@ -57,7 +57,7 @@ mod part2 {
         let (_, parsed_input) = parse::parse_input(input)?;
 
         // Add all positions of any rock to the rocks set.
-        let mut rocks: HashSet<Cord<isize>> = HashSet::new();
+        let mut rocks: HashSet<Cord<SandPosType>> = HashSet::new();
         for connected in parsed_input {
             for cord_pair in connected.windows(2) {
                 rocks.extend(&cord_pair[0].interpolate(&cord_pair[1]));
@@ -80,11 +80,6 @@ mod part2 {
         'newsand: loop {
             let mut sand = Sand { pos: SAND_START };
 
-            // Progress image.
-            if sands.len() % 1000 == 0 {
-                save_state("out.txt", left, right, bottom, &sands, &rocks);
-            }
-
             while sand.fall(&rocks, &sands) {
                 // If sand falls off covers hold stop adding sand.
                 if sand.pos.1 == SAND_START.1 {
@@ -97,17 +92,18 @@ mod part2 {
                 break 'newsand;
             }
         }
+        save_state("out.txt", left, right, bottom, &sands, &rocks);
         Ok(sands.len())
     }
 }
 
 fn save_state(
     file: &str,
-    left: isize,
-    right: isize,
-    bottom: isize,
-    sands: &HashSet<Cord<isize>>,
-    rocks: &HashSet<Cord<isize>>,
+    left: SandPosType,
+    right: SandPosType,
+    bottom: SandPosType,
+    sands: &HashSet<Cord<SandPosType>>,
+    rocks: &HashSet<Cord<SandPosType>>,
 ) {
     let mut file = OpenOptions::new()
         .read(true)
