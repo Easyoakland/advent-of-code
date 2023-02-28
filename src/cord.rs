@@ -18,7 +18,6 @@ pub fn abs_diff<T: Sub<T, Output = T> + PartialOrd>(x: T, y: T) -> T {
 pub trait CordData: PrimInt {}
 impl<T: PrimInt> CordData for T {}
 
-#[allow(dead_code)]
 impl<Datatype> Cord<Datatype>
 where
     Datatype: CordData,
@@ -55,12 +54,15 @@ where
     /// Radius is manhattan distance from center to edge.
     /// Moore neighborhood is a square formed by the extents of the Neumann neighborhood.
     pub fn moore_neighborhood(&self, radius: Datatype) -> Vec<Cord<Datatype>> {
-        let mut neighbors = Vec::new();
+        let x_max = radius + radius + One::one();
+        let y_max = radius + radius + One::one();
+        let mut neighbors = Vec::with_capacity(
+            num::cast::<Datatype, usize>(x_max).unwrap()
+                * num::cast::<Datatype, usize>(y_max).unwrap(),
+        );
         // Goes from left to right and from top to bottom generating neighbor cords.
         // Each radius increases number of cells in each dimension by 2 (each extent direction by 1) starting with 1 cell at radius = 1
-        for (i, j) in range(Zero::zero(), radius + radius + One::one())
-            .cartesian_product(range(Zero::zero(), radius + radius + One::one()))
-        {
+        for (i, j) in range(Zero::zero(), x_max).cartesian_product(range(Zero::zero(), y_max)) {
             let x = self.0.checked_sub(&radius);
             let y = self.1.checked_sub(&radius);
             let (x, y) = match (x, y) {
@@ -158,6 +160,51 @@ mod tests {
         let cord2 = Cord(498, 6);
         let out = cord1.manhattan_distance(&cord2);
         assert_eq!(out, 500 + 2);
+    }
+
+    #[test]
+    fn neumann_neighborhood_test() {
+        let cord = Cord(-8, 4);
+        let out = cord.neumann_neighborhood(1);
+        assert_eq!(
+            out,
+            vec![Cord(-9, 4), Cord(-8, 3), Cord(-8, 5), Cord(-7, 4)]
+        );
+
+        let out = cord.neumann_neighborhood(2);
+        assert_eq!(
+            out,
+            vec![
+                Cord(-10, 4),
+                Cord(-9, 3),
+                Cord(-9, 4),
+                Cord(-9, 5),
+                Cord(-8, 2),
+                Cord(-8, 3),
+                Cord(-8, 5),
+                Cord(-8, 6),
+                Cord(-7, 3),
+                Cord(-7, 4),
+                Cord(-7, 5),
+                Cord(-6, 4)
+            ]
+        );
+
+        let cord = Cord(0, 0);
+        let out = cord.neumann_neighborhood(3);
+        #[rustfmt::skip]
+        assert_eq!(
+            out,
+            vec![
+                Cord(-3, 0),
+                Cord(-2, -1),Cord(-2, 0), Cord(-2, 1),
+                Cord(-1, -2),Cord(-1, -1),Cord(-1, 0),Cord(-1, 1),Cord(-1, 2),
+                Cord(0, -3), Cord(0, -2), Cord(0, -1),Cord(0, 1), Cord(0, 2),Cord(0, 3),
+                Cord(1, -2), Cord(1, -1), Cord(1, 0), Cord(1, 1), Cord(1, 2),
+                Cord(2, -1), Cord(2, 0),  Cord(2, 1),
+                Cord(3, 0)
+            ]
+        );
     }
 
     #[test]
