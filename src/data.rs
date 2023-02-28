@@ -1,4 +1,4 @@
-use std::{collections::HashSet, ops::Deref};
+use std::collections::HashSet;
 
 use crate::cord::Cord;
 
@@ -6,21 +6,7 @@ type SandPosType = usize;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Sand {
-    pos: Cord<SandPosType>,
-}
-
-impl Sand {
-    pub fn new(pos: Cord<SandPosType>) -> Sand {
-        Sand { pos }
-    }
-}
-
-impl Deref for Sand {
-    type Target = Cord<SandPosType>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.pos
-    }
+    pub pos: Cord<SandPosType>,
 }
 
 impl Sand {
