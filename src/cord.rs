@@ -1,6 +1,6 @@
 #![allow(dead_code)]
-use itertools::Itertools;
-use num::{range, range_inclusive, One, PrimInt, Zero};
+use itertools::{Itertools, Product};
+use num::{iter::Range, range, range_inclusive, One, PrimInt, Zero};
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -18,9 +18,40 @@ pub fn abs_diff<T: Sub<T, Output = T> + PartialOrd>(x: T, y: T) -> T {
 pub trait CordData: PrimInt {}
 impl<T: PrimInt> CordData for T {}
 
+struct MooreNeighborhoodIterator<Datatype: CordData> {
+    iterator: Product<Range<Datatype>, Range<Datatype>>,
+    cord: Cord<Datatype>,
+    radius: Datatype,
+}
+
+impl<Datatype: CordData> Iterator for MooreNeighborhoodIterator<Datatype> {
+    type Item = Cord<Datatype>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Goes from left to right and from top to bottom generating neighbor cords.
+        // Each radius increases number of cells in each dimension by 2 (each extent direction by 1) starting with 1 cell at radius = 1
+        while let Some((i, j)) = self.iterator.next() {
+            let x = self.cord.0.checked_sub(&self.radius);
+            let y = self.cord.1.checked_sub(&self.radius);
+            let (x, y) = match (x, y) {
+                (Some(a), Some(b)) => (a.add(i), b.add(j)),
+                _ => continue,
+            };
+
+            // Don't add self to neighbor list.
+            if x == self.cord.0 && y == self.cord.1 {
+                continue;
+            }
+
+            return Some(Cord(x, y));
+        }
+        None
+    }
+}
+
 impl<Datatype> Cord<Datatype>
 where
-    Datatype: CordData + Copy,
+    Datatype: CordData,
 {
     pub fn op1(self, f: fn(Datatype) -> Datatype) -> Self {
         Cord(f(self.0), f(self.1))
@@ -53,32 +84,15 @@ where
 
     /// Radius is manhattan distance from center to edge.
     /// Moore neighborhood is a square formed by the extents of the Neumann neighborhood.
-    pub fn moore_neighborhood(&self, radius: Datatype) -> impl IntoIterator<Item = Cord<Datatype>> {
+    pub fn moore_neighborhood(&self, radius: Datatype) -> impl Iterator<Item = Cord<Datatype>> {
         let x_max = radius + radius + One::one();
         let y_max = radius + radius + One::one();
-        let mut neighbors = Vec::with_capacity(
-            num::cast::<Datatype, usize>(x_max).unwrap()
-                * num::cast::<Datatype, usize>(y_max).unwrap(),
-        );
-        // Goes from left to right and from top to bottom generating neighbor cords.
-        // Each radius increases number of cells in each dimension by 2 (each extent direction by 1) starting with 1 cell at radius = 1
-        for (i, j) in range(Zero::zero(), x_max).cartesian_product(range(Zero::zero(), y_max)) {
-            let x = self.0.checked_sub(&radius);
-            let y = self.1.checked_sub(&radius);
-            let (x, y) = match (x, y) {
-                (Some(a), Some(b)) => (a.add(i), b.add(j)),
-                _ => continue,
-            };
-
-            // Don't add self to neighbor list.
-            if x == self.0 && y == self.1 {
-                continue;
-            }
-
-            neighbors.push(Cord(x, y));
+        let iterator = range(Zero::zero(), x_max).cartesian_product(range(Zero::zero(), y_max));
+        MooreNeighborhoodIterator {
+            iterator,
+            cord: *self,
+            radius,
         }
-
-        neighbors
     }
 
     /// Radius is manhattan distance of furthest neighbors.
@@ -88,9 +102,7 @@ where
         radius: Datatype,
     ) -> impl Iterator<Item = Cord<Datatype>> + '_ {
         let neighbors = self.moore_neighborhood(radius);
-        neighbors
-            .into_iter()
-            .filter(move |&x| x.manhattan_distance(&self) <= radius)
+        neighbors.filter(move |&x| x.manhattan_distance(&self) <= radius)
     }
 
     /// Returns a vector of every cordinate with an x or y value between self and other inclusive.
