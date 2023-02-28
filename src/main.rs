@@ -1,4 +1,8 @@
-use std::{error::Error, fs};
+use crate::data::SandPosType;
+use crate::{cord::Cord, data::Sand};
+use std::collections::HashSet;
+use std::fs::OpenOptions;
+use std::{error::Error, fs, io::Write};
 mod cord;
 mod data;
 mod parse;
@@ -10,10 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 mod part1 {
-    use crate::{cord::Cord, data::Sand};
-    use std::collections::HashSet;
-    const SAND_START: Cord<usize> = Cord(500, 0);
-
+    const SAND_START: Cord<SandPosType> = Cord(500, 0);
     use super::*;
     pub fn run(file: &str) -> Result<usize, Box<dyn Error>> {
         let input_str = fs::read_to_string(file)?;
@@ -21,7 +22,7 @@ mod part1 {
         let (_, parsed_input) = parse::parse_input(input)?;
 
         // Add all positions of any rock to the rocks set.
-        let mut rocks: HashSet<Cord<usize>> = HashSet::new();
+        let mut rocks: HashSet<Cord<SandPosType>> = HashSet::new();
         for connected in parsed_input {
             for cord_pair in connected.windows(2) {
                 rocks.extend(&cord_pair[0].interpolate(&cord_pair[1]));
@@ -47,9 +48,7 @@ mod part1 {
 }
 
 mod part2 {
-    use crate::{cord::Cord, data::Sand};
-    use std::collections::HashSet;
-    const SAND_START: Cord<usize> = Cord(500, 0);
+    const SAND_START: Cord<SandPosType> = Cord(500, 0);
 
     use super::*;
     pub fn run(file: &str) -> Result<usize, Box<dyn Error>> {
@@ -58,7 +57,7 @@ mod part2 {
         let (_, parsed_input) = parse::parse_input(input)?;
 
         // Add all positions of any rock to the rocks set.
-        let mut rocks: HashSet<Cord<usize>> = HashSet::new();
+        let mut rocks: HashSet<Cord<isize>> = HashSet::new();
         for connected in parsed_input {
             for cord_pair in connected.windows(2) {
                 rocks.extend(&cord_pair[0].interpolate(&cord_pair[1]));
@@ -67,8 +66,9 @@ mod part2 {
 
         // Find bottom level. It is 2 below bottom rock.
         let bottom = rocks.iter().max_by_key(|&x| x.1).unwrap().1 + 2;
-        let left = rocks.iter().min_by_key(|&x| x.0).unwrap().0;
-        let right = rocks.iter().max_by_key(|&x| x.0).unwrap().0;
+        // 200's are buffer so overrun doesn't go to the void.
+        let left = rocks.iter().min_by_key(|&x| x.0).unwrap().0 - 200;
+        let right = rocks.iter().max_by_key(|&x| x.0).unwrap().0 + 200;
 
         let bottom_left = Cord(left, bottom);
         let bottom_right = Cord(right, bottom);
@@ -79,15 +79,53 @@ mod part2 {
         let mut sands = HashSet::new();
         'newsand: loop {
             let mut sand = Sand { pos: SAND_START };
+
+            // Progress image.
+            if sands.len() % 1000 == 0 {
+                save_state("out.txt", left, right, bottom, &sands, &rocks);
+            }
+
             while sand.fall(&rocks, &sands) {
                 // If sand falls off covers hold stop adding sand.
-                if sand.pos == SAND_START {
+                if sand.pos.1 == SAND_START.1 {
                     break 'newsand;
                 }
             }
             sands.insert(sand.pos);
+            // Check for sand that doesn't get to fall.
+            if sand.pos == SAND_START {
+                break 'newsand;
+            }
         }
         Ok(sands.len())
+    }
+}
+
+fn save_state(
+    file: &str,
+    left: isize,
+    right: isize,
+    bottom: isize,
+    sands: &HashSet<Cord<isize>>,
+    rocks: &HashSet<Cord<isize>>,
+) {
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(file)
+        .unwrap();
+    for y in 0..=bottom {
+        for x in left..=right {
+            if rocks.contains(&Cord(x, y)) {
+                write!(file, "#").unwrap();
+            } else if sands.contains(&Cord(x, y)) {
+                write!(file, "o").unwrap();
+            } else {
+                write!(file, " ").unwrap();
+            }
+        }
+        writeln!(file, "").unwrap();
     }
 }
 

@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::cord::Cord;
 
-type SandPosType = usize;
+pub type SandPosType = isize;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Sand {
@@ -10,7 +10,11 @@ pub struct Sand {
 }
 
 impl Sand {
-    pub fn fall(&mut self, rocks: &HashSet<Cord<usize>>, sands: &HashSet<Cord<usize>>) -> bool {
+    pub fn fall(
+        &mut self,
+        rocks: &HashSet<Cord<SandPosType>>,
+        sands: &HashSet<Cord<SandPosType>>,
+    ) -> bool {
         // Try going down first.
         let next_pos = self.pos + (0, 1).into();
         if !rocks.contains(&next_pos) && !sands.contains(&next_pos) {
