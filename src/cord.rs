@@ -99,7 +99,7 @@ where
         for (x, y) in range_inclusive(self.0.min(other.0), self.0.max(other.0))
             .cartesian_product(range_inclusive(self.1.min(other.1), self.1.max(other.1)))
         {
-            out.push(Cord(x, y))
+            out.push(Cord(x, y));
         }
         out
     }

@@ -20,15 +20,13 @@ where
 {
     move |input: I| {
         let (input, out) = f.parse(input)?;
-        let out = match (out.into()).parse::<O>() {
-            Ok(x) => x,
-            // If there is FromStr error either the output type can't be parsed from the original combinator's output.
-            Err(_) => {
-                return Err(nom::Err::Failure(E::from_error_kind(
-                    input,
-                    nom::error::ErrorKind::Fail,
-                )));
-            }
+        let Ok(out) = (out.into()).parse::<O>()
+        else {
+            // If there is FromStr error the output type can't be parsed from the original combinator's output.
+            return Err(nom::Err::Failure(E::from_error_kind(
+                input,
+                nom::error::ErrorKind::Fail,
+            )));
         };
         Ok((input, out))
     }
