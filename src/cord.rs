@@ -179,5 +179,20 @@ mod tests {
         let cord2 = Cord(496, 6);
         let out = cord1.interpolate(&cord2);
         assert_eq!(out, vec![Cord(496, 6), Cord(497, 6), Cord(498, 6)]);
+
+        let cord1 = Cord(498, 6);
+        let cord2 = Cord(496, 7);
+        let out = cord1.interpolate(&cord2);
+        assert_eq!(
+            out,
+            vec![
+                Cord(496, 6),
+                Cord(496, 7),
+                Cord(497, 6),
+                Cord(497, 7),
+                Cord(498, 6),
+                Cord(498, 7)
+            ]
+        );
     }
 }
