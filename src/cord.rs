@@ -1,7 +1,8 @@
-use std::ops::{Add, AddAssign, Sub, SubAssign};
-
+#![allow(dead_code)]
 use itertools::Itertools;
 use num::{range, range_inclusive, One, PrimInt, Zero};
+use std::ops::{Add, AddAssign, Sub, SubAssign};
+
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Cord<T>(pub T, pub T);
 
@@ -99,8 +100,8 @@ where
     /// Returns a vector of every cordinate with an x or y value between self and other inclusive.
     pub fn interpolate(&self, other: &Self) -> Vec<Cord<Datatype>> {
         let mut out = Vec::new();
-        for (x, y) in
-            range_inclusive(self.0, other.0).cartesian_product(range_inclusive(self.1, other.1))
+        for (x, y) in range_inclusive(self.0.min(other.0), self.0.max(other.0))
+            .cartesian_product(range_inclusive(self.1.min(other.1), self.1.max(other.1)))
         {
             out.push(Cord(x, y))
         }
@@ -163,7 +164,7 @@ mod tests {
     fn manhattan_distance_test() {
         let cord1 = Cord(-2isize, 4);
         let cord2 = Cord(498, 6);
-        let out: isize = cord1.manhattan_distance(&cord2);
+        let out = cord1.manhattan_distance(&cord2);
         assert_eq!(out, 500 + 2);
     }
 
@@ -173,5 +174,10 @@ mod tests {
         let cord2 = Cord(498, 6);
         let out = cord1.interpolate(&cord2);
         assert_eq!(out, vec![Cord(498, 4), Cord(498, 5), Cord(498, 6)]);
+
+        let cord1 = Cord(498, 6);
+        let cord2 = Cord(496, 6);
+        let out = cord1.interpolate(&cord2);
+        assert_eq!(out, vec![Cord(496, 6), Cord(497, 6), Cord(498, 6)]);
     }
 }

@@ -1,28 +1,45 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, ops::Deref};
 
 use crate::cord::Cord;
 
-struct Sand {
-    pos: Cord<usize>,
+type SandPosType = usize;
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct Sand {
+    pos: Cord<SandPosType>,
 }
 
 impl Sand {
-    fn lower(&mut self, rocks: &HashSet<Cord<usize>>, sands: &HashSet<Cord<usize>>) -> bool {
+    pub fn new(pos: Cord<SandPosType>) -> Sand {
+        Sand { pos }
+    }
+}
+
+impl Deref for Sand {
+    type Target = Cord<SandPosType>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.pos
+    }
+}
+
+impl Sand {
+    pub fn fall(&mut self, rocks: &HashSet<Cord<usize>>, sands: &HashSet<Cord<usize>>) -> bool {
         // Try going down first.
-        let next_pos = self.pos - (0, 1).into();
-        if !rocks.contains(&next_pos) {
+        let next_pos = self.pos + (0, 1).into();
+        if !rocks.contains(&next_pos) && !sands.contains(&next_pos) {
             self.pos = next_pos;
             return true;
         }
         // Try down left next.
-        let next_pos = self.pos - (1, 1).into();
-        if !rocks.contains(&next_pos) {
+        let next_pos = self.pos - (1, 0).into() + (0, 1).into();
+        if !rocks.contains(&next_pos) && !sands.contains(&next_pos) {
             self.pos = next_pos;
             return true;
         }
         // Try down right next.
-        let next_pos = self.pos + (1, 0).into() - (0, 1).into();
-        if !rocks.contains(&next_pos) {
+        let next_pos = self.pos + (1, 1).into();
+        if !rocks.contains(&next_pos) && !sands.contains(&next_pos) {
             self.pos = next_pos;
             return true;
         }

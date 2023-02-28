@@ -10,8 +10,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 mod part1 {
-    use crate::cord::Cord;
+    use crate::{cord::Cord, data::Sand};
     use std::collections::HashSet;
+    const SAND_START: Cord<usize> = Cord(500, 0);
 
     use super::*;
     pub fn run(file: &str) -> Result<usize, Box<dyn Error>> {
@@ -20,14 +21,28 @@ mod part1 {
         let (_, parsed_input) = parse::parse_input(input)?;
 
         // Add all positions of any rock to the rocks set.
-        let mut rocks: HashSet<Cord<isize>> = HashSet::new();
+        let mut rocks: HashSet<Cord<usize>> = HashSet::new();
         for connected in parsed_input {
             for cord_pair in connected.windows(2) {
                 rocks.extend(&cord_pair[0].interpolate(&cord_pair[1]));
             }
         }
 
-        todo!()
+        // Find bottom level
+        let bottom = rocks.iter().max_by_key(|&x| x.1).unwrap().1;
+
+        let mut sands = HashSet::new();
+        'newsand: loop {
+            let mut sand = Sand::new(SAND_START);
+            while sand.fall(&rocks, &sands) {
+                // If sand falls off the edge stop adding sand.
+                if sand.1 > bottom {
+                    break 'newsand;
+                }
+            }
+            sands.insert(*sand);
+        }
+        Ok(sands.len())
     }
 }
 
@@ -38,7 +53,7 @@ mod tests {
     fn test_part1_out_parse() -> Result<(), Box<dyn Error>> {
         let input_str = fs::read_to_string("inputtest.txt")?;
         let input = Box::leak(Box::new(input_str));
-        let (_, parsed_input) = parse::parse_input::<isize>(input)?;
+        let (_, parsed_input) = parse::parse_input::<usize>(input)?;
         dbg!(parsed_input);
         Ok(())
     }
