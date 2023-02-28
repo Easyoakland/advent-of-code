@@ -49,7 +49,7 @@ where
     pub fn manhattan_distance(self, other: &Self) -> Datatype {
         // Try one way and if it doesn't give valid value try other.
         let temp = self.op2(*other, abs_diff::<Datatype>);
-        (temp.0 + temp.1).into()
+        temp.0 + temp.1
     }
 
     /// Radius is manhattan distance from center to edge.
@@ -61,20 +61,16 @@ where
         for (i, j) in range(Zero::zero(), radius + radius + One::one())
             .cartesian_product(range(Zero::zero(), radius + radius + One::one()))
         {
-            let x = self.0.checked_sub(&radius.into());
-            let y = self.1.checked_sub(&radius.into());
+            let x = self.0.checked_sub(&radius);
+            let y = self.1.checked_sub(&radius);
             let (x, y) = match (x, y) {
                 (Some(a), Some(b)) => (a.add(i), b.add(j)),
                 _ => continue,
             };
 
-            // Don't make neighbors with negative cords.
-            if x < One::one() || y < One::one() {
-                continue;
-            }
             // If neither is negative can safely convert to unsigned.
-            let x = x.try_into().unwrap();
-            let y = y.try_into().unwrap();
+            let x = x;
+            let y = y;
 
             // Don't add self to neighbor list.
             if x == self.0 && y == self.1 {

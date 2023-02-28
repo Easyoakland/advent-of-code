@@ -121,7 +121,7 @@ fn save_state(
                 write!(file, " ").unwrap();
             }
         }
-        writeln!(file, "").unwrap();
+        writeln!(file).unwrap();
     }
 }
 
