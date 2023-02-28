@@ -20,7 +20,7 @@ impl<T: PrimInt> CordData for T {}
 
 impl<Datatype> Cord<Datatype>
 where
-    Datatype: CordData,
+    Datatype: CordData + Copy,
 {
     pub fn op1(self, f: fn(Datatype) -> Datatype) -> Self {
         Cord(f(self.0), f(self.1))
@@ -53,7 +53,7 @@ where
 
     /// Radius is manhattan distance from center to edge.
     /// Moore neighborhood is a square formed by the extents of the Neumann neighborhood.
-    pub fn moore_neighborhood(&self, radius: Datatype) -> Vec<Cord<Datatype>> {
+    pub fn moore_neighborhood(&self, radius: Datatype) -> impl IntoIterator<Item = Cord<Datatype>> {
         let x_max = radius + radius + One::one();
         let y_max = radius + radius + One::one();
         let mut neighbors = Vec::with_capacity(
@@ -83,12 +83,14 @@ where
 
     /// Radius is manhattan distance of furthest neighbors.
     /// Neumann neighborhood is all cells a manhattan distance of the radius or smaller.
-    pub fn neumann_neighborhood(&self, radius: Datatype) -> Vec<Cord<Datatype>> {
+    pub fn neumann_neighborhood(
+        &self,
+        radius: Datatype,
+    ) -> impl Iterator<Item = Cord<Datatype>> + '_ {
         let neighbors = self.moore_neighborhood(radius);
         neighbors
             .into_iter()
-            .filter(|&x| x.manhattan_distance(self) <= radius)
-            .collect()
+            .filter(move |&x| x.manhattan_distance(&self) <= radius)
     }
 
     /// Returns a vector of every cordinate with an x or y value between self and other inclusive.
@@ -167,11 +169,11 @@ mod tests {
         let cord = Cord(-8, 4);
         let out = cord.neumann_neighborhood(1);
         assert_eq!(
-            out,
+            out.collect::<Vec<_>>(),
             vec![Cord(-9, 4), Cord(-8, 3), Cord(-8, 5), Cord(-7, 4)]
         );
 
-        let out = cord.neumann_neighborhood(2);
+        let out: Vec<_> = cord.neumann_neighborhood(2).collect();
         assert_eq!(
             out,
             vec![
@@ -191,7 +193,7 @@ mod tests {
         );
 
         let cord = Cord(0, 0);
-        let out = cord.neumann_neighborhood(3);
+        let out: Vec<_> = cord.neumann_neighborhood(3).collect();
         #[rustfmt::skip]
         assert_eq!(
             out,
