@@ -106,14 +106,10 @@ where
     }
 
     /// Returns a vector of every cordinate with an x or y value between self and other inclusive.
-    pub fn interpolate(&self, other: &Self) -> Vec<Cord<Datatype>> {
-        let mut out = Vec::new();
-        for (x, y) in range_inclusive(self.0.min(other.0), self.0.max(other.0))
+    pub fn interpolate(&self, other: &Self) -> impl Iterator<Item = Cord<Datatype>> {
+        range_inclusive(self.0.min(other.0), self.0.max(other.0))
             .cartesian_product(range_inclusive(self.1.min(other.1), self.1.max(other.1)))
-        {
-            out.push(Cord(x, y));
-        }
-        out
+            .map_into()
     }
 }
 
@@ -225,17 +221,17 @@ mod tests {
     fn interpolate_test() {
         let cord1 = Cord(498, 4);
         let cord2 = Cord(498, 6);
-        let out = cord1.interpolate(&cord2);
+        let out: Vec<_> = cord1.interpolate(&cord2).collect();
         assert_eq!(out, vec![Cord(498, 4), Cord(498, 5), Cord(498, 6)]);
 
         let cord1 = Cord(498, 6);
         let cord2 = Cord(496, 6);
-        let out = cord1.interpolate(&cord2);
+        let out: Vec<_> = cord1.interpolate(&cord2).collect();
         assert_eq!(out, vec![Cord(496, 6), Cord(497, 6), Cord(498, 6)]);
 
         let cord1 = Cord(498, 6);
         let cord2 = Cord(496, 7);
-        let out = cord1.interpolate(&cord2);
+        let out: Vec<_> = cord1.interpolate(&cord2).collect();
         assert_eq!(
             out,
             vec![

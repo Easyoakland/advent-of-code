@@ -8,7 +8,7 @@ mod parse;
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Part 1 answer: {:#?}", part1::run("input.txt", 2000000)?);
-    // println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
+    // println!("Part 2 answer: {:#?}", part2::run("input.txt", 4000000)?);
     Ok(())
 }
 
@@ -30,7 +30,6 @@ mod part1 {
                 safe_spots.extend(
                     ((Cord(pair.sensor.0, row) - Cord(leftover, 0))
                         .interpolate(&(Cord(pair.sensor.0, row) + Cord(leftover, 0))))
-                    .into_iter()
                     .map(|x| x.0),
                 )
             }
@@ -67,6 +66,22 @@ mod part1 {
     }
 }
 
+mod part2 {
+    use super::*;
+    use std::collections::HashSet;
+    pub fn run(file: &str, upper_limit: isize) -> Result<usize, Box<dyn Error>> {
+        let input_str = fs::read_to_string(file)?;
+        let input = Box::leak(Box::new(input_str));
+        let possible_locations = Cord(0, 0)
+            .interpolate(&Cord(upper_limit, upper_limit))
+            .into_iter()
+            .map(|x| dbc!(x))
+            .collect::<HashSet<_>>();
+        dbg!("possible.");
+        todo!();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -85,9 +100,15 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn test_part2() -> Result<(), Box<dyn Error>> {
-    //     assert_eq!(part2::run("inputtest.txt")?, 93);
-    //     Ok(())
-    // }
+    #[test]
+    fn test_part1_ans() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part1::run("input.txt", 2000000)?, 5564017);
+        Ok(())
+    }
+
+    #[test]
+    fn test_part2() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part2::run("inputtest.txt", 20)?, 56000011);
+        Ok(())
+    }
 }
