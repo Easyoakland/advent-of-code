@@ -13,8 +13,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 mod part1 {
-    use itertools::Itertools;
-
     use super::*;
     use std::collections::HashSet;
     pub fn run(file: &str, row: isize) -> Result<usize, Box<dyn Error>> {
@@ -27,8 +25,7 @@ mod part1 {
             // If the scan range reaches onto the row of interest.
             // Project the leftover range onto the row.
             let leftover =
-                radius.saturating_sub(dbc!(isize::try_from(row.abs_diff(pair.sensor.1)).unwrap()));
-            dbc!(&pair, &radius, &leftover);
+                radius.saturating_sub(isize::try_from(row.abs_diff(pair.sensor.1)).unwrap());
             if leftover >= 0 {
                 safe_spots.extend(
                     ((Cord(pair.sensor.0, row) - Cord(leftover, 0))
@@ -37,7 +34,6 @@ mod part1 {
                     .map(|x| x.0),
                 )
             }
-            dbc!(&safe_spots.iter().sorted().collect::<Vec<_>>());
             // Scanners are definitely safe.
             if pair.sensor.1 == row {
                 safe_spots.insert(pair.sensor.0);
@@ -49,7 +45,6 @@ mod part1 {
                 safe_spots.remove(&pair.beacon.0);
             }
         }
-        dbc!(&safe_spots.iter().sorted().collect::<Vec<_>>());
 
         // Only care about safe spots on the same row
         Ok(safe_spots.len())
