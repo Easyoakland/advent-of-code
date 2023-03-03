@@ -1,11 +1,11 @@
 #[allow(unused_imports)]
 use advent_lib::{self, dbc, parse::read_file_static};
 use cached::proc_macro::cached;
-use std::{collections::BTreeMap, error::Error};
-
-/* TODO use djistra's algorithm after weighting edges inversely to the benefit of arriving at node at a time. */
-/* Look into Floyd-Warshall https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm*/
-/* Even more alternatively make a tree 30 minutes (steps) deep and find longest weighted path */
+use std::{
+    collections::{hash_map::DefaultHasher, BTreeMap},
+    error::Error,
+    hash::{Hash, Hasher},
+};
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Part 1 answer: {:#?}", part1::run("input.txt")?);
@@ -51,7 +51,7 @@ fn floyd_wershall<'a>(
     flowrates: &'a BTreeMap<&'a str, u32>,
     distances: &mut BTreeMap<(&'a str, &'a str), u32>,
 ) {
-    // Floyd-Warshall. Could have done dijkstra but learning new algorithm, its simple, everyone online referred to it for some reason even though its slower than dijkstra.
+    // Floyd-Warshall. Could have done dijkstra but learning new algorithm, its simple, and everyone online referred to it for some reason even though its slower than dijkstra.
     for &k in flowrates.keys() {
         for &j in flowrates.keys() {
             for &i in flowrates.keys() {
@@ -77,7 +77,11 @@ fn floyd_wershall<'a>(
 
 #[cached(
     key = "String",
-    convert = r#"{ format!("{}{}{:?}", time, start, flowrates) }"#
+    convert = r#"{ format!("{}{}{}", time, start, {
+        let mut hasher = DefaultHasher::default();
+        flowrates.hash(&mut hasher);
+        hasher.finish()
+    }) }"#
 )]
 fn max_value(
     time: u32,
@@ -92,15 +96,15 @@ fn max_value(
         // For each valve that can be reached in time.
         .filter(|(_v, _f, d)| d < &time)
         // Map it to its max value.
-        // Note that the valve shouldn't be directly reached by subrecursions so it is removed from flowrates.
         .map(|(v, f, d)| {
-            (f * (time - d - 1))
-                + if flowrates.len() > 1 {
+            (f * (time - d - 1)) // Value from just the explored valve.
+                + if flowrates.len() > 1 { // Largest possible value of still unexplored valves.
                     max_value(
                         time - d - 1,
                         v.clone(),
                         {
                             let mut f_clone = flowrates.clone();
+                            // The valve shouldn't be directly reached by subrecursions (no valve to toggle) so it is removed from flowrates.
                             f_clone.remove_entry(v);
                             f_clone
                         },
