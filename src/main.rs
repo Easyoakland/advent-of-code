@@ -83,13 +83,7 @@ fn max_value(
     recursed: &mut String,
 ) -> u32 {
     recursed.push_str(&(start.clone() + " "));
-    for _ in 0..(30 - time) {
-        print!(" ");
-    }
-    println!(
-        "Starting function {recursed} with parameters: {}, {}",
-        &time, &start
-    );
+    println!("Starting {}, {}    tree {recursed}", &time, &start);
     let out = flowrates
         .iter()
         // Get the valve, flowrate, and distance from the start position to the valve
@@ -99,11 +93,6 @@ fn max_value(
         // Map it to its max value.
         // Note that the valve shouldn't be directly reached by subrecursions.
         .map(|(v, f, d)| {
-            println!(
-                "{v} with flow {f} yields {} pressure in {} time left.",
-                (f * (time - d - 1)),
-                time - d - 1
-            );
             (f * (time - d - 1))
                 + if flowrates.len() > 1 {
                     max_value(
@@ -112,7 +101,6 @@ fn max_value(
                         {
                             let mut f_clone = flowrates.clone();
                             f_clone.remove_entry(v);
-                            println!("{f_clone:?}");
                             f_clone
                         },
                         distances.clone(),
@@ -124,13 +112,7 @@ fn max_value(
         })
         .max()
         .unwrap_or_default();
-    for _ in 0..(30 - time) {
-        print!(" ");
-    }
-    println!(
-        "Ending function {recursed} with parameters: {}, {}, {}",
-        &time, &start, &out
-    );
+    println!("Ending   {}, {}, {} tree {recursed}", &time, &start, &out);
 
     recursed.replace_range(recursed.len() - 3..recursed.len(), "");
     out
@@ -150,14 +132,12 @@ mod part1 {
             // .filter(|&((u, v), _)| flowrates[u] != 0 && flowrates[v] != 0)
             .map(|((u, v), x)| ((u.to_string(), v.to_string()), x))
             .collect::<BTreeMap<_, _>>();
-        dbc!(&distances);
         // Remove zero valves (they're useless). Also convert indexes to Strings for max_value later
         let flowrates = flowrates
             .into_iter()
             .filter(|&(_, f)| f != 0)
             .map(|(v, f)| (v.to_string(), f))
             .collect::<BTreeMap<_, _>>();
-        dbc!(&flowrates);
         Ok(max_value(
             MAX_MINUTES,
             "AA".to_string(),
@@ -188,7 +168,7 @@ mod tests {
 
     #[test]
     fn part1_ans() -> Result<(), Box<dyn Error>> {
-        assert_eq!(part1::run("input.txt")?, 5564017);
+        assert_eq!(part1::run("input.txt")?, 2119);
         Ok(())
     }
 
