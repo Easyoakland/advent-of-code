@@ -1,5 +1,6 @@
 #[allow(unused_imports)]
 use advent_lib::{self, dbc, parse::read_file_static};
+use cached::proc_macro::cached;
 use std::{collections::BTreeMap, error::Error};
 
 /* TODO use djistra's algorithm after weighting edges inversely to the benefit of arriving at node at a time. */
@@ -74,48 +75,54 @@ fn floyd_wershall<'a>(
     }
 }
 
-// #[cached::proc_macro::cached]
+#[cached(
+    key = "String",
+    convert = r#"{ format!("{}{}{:?}", time, start, flowrates) }"#,
+    with_cached_flag = true
+)]
 fn max_value(
     time: u32,
     start: String,
     flowrates: BTreeMap<String, u32>,
-    distances: BTreeMap<(String, String), u32>,
-    recursed: &mut String,
-) -> u32 {
-    recursed.push_str(&(start.clone() + " "));
-    println!("Starting {}, {}    tree {recursed}", &time, &start);
-    let out = flowrates
-        .iter()
-        // Get the valve, flowrate, and distance from the start position to the valve
-        .map(|(v, &f)| (v, f, distances[&(start.clone(), v.clone())].clone()))
-        // For each valve that can be reached in time.
-        .filter(|(_v, _f, d)| d < &time)
-        // Map it to its max value.
-        // Note that the valve shouldn't be directly reached by subrecursions.
-        .map(|(v, f, d)| {
-            (f * (time - d - 1))
-                + if flowrates.len() > 1 {
-                    max_value(
-                        time - d - 1,
-                        v.clone(),
-                        {
-                            let mut f_clone = flowrates.clone();
-                            f_clone.remove_entry(v);
-                            f_clone
-                        },
-                        distances.clone(),
-                        recursed,
-                    )
-                } else {
-                    0
-                }
-        })
-        .max()
-        .unwrap_or_default();
-    println!("Ending   {}, {}, {} tree {recursed}", &time, &start, &out);
-
-    recursed.replace_range(recursed.len() - 3..recursed.len(), "");
-    out
+    distances: &BTreeMap<(String, String), u32>,
+) -> cached::Return<u32> {
+    cached::Return::new(
+        flowrates
+            .iter()
+            // Get the valve, flowrate, and distance from the start position to the valve
+            .map(|(v, &f)| (v, f, distances[&(start.clone(), v.clone())].clone()))
+            // For each valve that can be reached in time.
+            .filter(|(_v, _f, d)| d < &time)
+            // Map it to its max value.
+            // Note that the valve shouldn't be directly reached by subrecursions.
+            .map(|(v, f, d)| {
+                (f * (time - d - 1))
+                    + if flowrates.len() > 1 {
+                        let out = max_value(
+                            time - d - 1,
+                            v.clone(),
+                            {
+                                let mut f_clone = flowrates.clone();
+                                f_clone.remove_entry(v);
+                                f_clone
+                            },
+                            distances,
+                        );
+                        if out.was_cached {
+                            println!("Cached return: {} {} {:?}", time - d - 1, v.clone(), {
+                                let mut f_clone = flowrates.clone();
+                                f_clone.remove_entry(v);
+                                f_clone
+                            })
+                        }
+                        *out
+                    } else {
+                        0
+                    }
+            })
+            .max()
+            .unwrap_or_default(),
+    )
 }
 
 mod part1 {
@@ -138,12 +145,11 @@ mod part1 {
             .filter(|&(_, f)| f != 0)
             .map(|(v, f)| (v.to_string(), f))
             .collect::<BTreeMap<_, _>>();
-        Ok(max_value(
+        Ok(*max_value(
             MAX_MINUTES,
             "AA".to_string(),
             flowrates,
-            distances,
-            &mut "".to_owned(),
+            &distances,
         ))
     }
 }
