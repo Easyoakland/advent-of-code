@@ -77,7 +77,7 @@ fn floyd_wershall<'a>(
 
 #[cached(
     key = "String",
-    convert = r#"{ format!("{}{}{}", time, start, {
+    convert = r#"{ format!("{}{}{}", time, start,  {
         let mut hasher = DefaultHasher::default();
         flowrates.hash(&mut hasher);
         hasher.finish()
@@ -88,17 +88,23 @@ fn max_value(
     start: String,
     flowrates: BTreeMap<String, u32>,
     distances: &BTreeMap<(String, String), u32>,
+    max_so_far: &mut u32,
 ) -> u32 {
-    flowrates
+    let out = flowrates
         .iter()
-        // Get the valve, flowrate, and distance from the start position to the valve
+        // Get the valve, flowrate, and distance from the start position to each valve
         .map(|(v, &f)| (v, f, distances[&(start.clone(), v.clone())].clone()))
         // For each valve that can be reached in time.
         .filter(|(_v, _f, d)| d < &time)
         // Map it to its max value.
         .map(|(v, f, d)| {
-            (f * (time - d - 1)) // Value from just the explored valve.
-                + if flowrates.len() > 1 { // Largest possible value of still unexplored valves.
+            let immediate_val = f * (time - d - 1); // Value from just the explored valve.
+            immediate_val
+            // If the maximum possible value from recursing is not > max_so_far then don't bother. Gives 2x speedup.
+                + if flowrates.values().fold(0, |acc, x| acc + x * time) + immediate_val
+                    >= *max_so_far
+                {
+                    // Largest possible value of still unexplored valves.
                     max_value(
                         time - d - 1,
                         v.clone(),
@@ -109,13 +115,16 @@ fn max_value(
                             f_clone
                         },
                         distances,
+                        max_so_far,
                     )
                 } else {
                     0
                 }
         })
         .max()
-        .unwrap_or_default()
+        .unwrap_or_default();
+    *max_so_far = (*max_so_far).max(out);
+    out
 }
 
 mod part1 {
@@ -143,6 +152,7 @@ mod part1 {
             "AA".to_string(),
             flowrates,
             &distances,
+            &mut 0,
         ))
     }
 }
