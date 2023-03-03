@@ -9,7 +9,7 @@ use std::{
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Part 1 answer: {:#?}", part1::run("input.txt")?);
-    // println!("Part 2 answer: {:#?}", part2::run("input.txt", 4000000)?);
+    println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
     Ok(())
 }
 
@@ -77,7 +77,7 @@ fn floyd_wershall<'a>(
 
 #[cached(
     key = "String",
-    convert = r#"{ format!("{}{}{}", time, start,  {
+    convert = r#"{ format!("{}{}{}{}", time, e, start,  {
         let mut hasher = DefaultHasher::default();
         flowrates.hash(&mut hasher);
         hasher.finish()
@@ -88,10 +88,12 @@ fn max_value(
     start: String,
     flowrates: BTreeMap<String, u32>,
     distances: &BTreeMap<(String, String), u32>,
-    max_so_far: &mut u32,
-    e: bool, // not cached as it is the same between runs
+    e: bool,
+    // context: &mut String,
 ) -> u32 {
-    let out = flowrates
+    // println!("{time:0>2} {context}");
+    // context.push_str(&format!("{start} "));
+    let mut out = flowrates
         .iter()
         // Get the valve, flowrate, and distance from the start position to each valve
         .map(|(v, &f)| (v, f, distances[&(start.clone(), v.clone())].clone()))
@@ -101,9 +103,7 @@ fn max_value(
         .map(|(v, f, d)| {
             let immediate_val = f * (time - d - 1); // Value from just the explored valve.
             immediate_val
-            // If the maximum possible value from recursing is not > max_so_far then don't bother. Gives 2x speedup.
-                + if flowrates.len() > 1
-                {
+                + if flowrates.len() > 1 {
                     // Largest possible value of still unexplored valves.
                     max_value(
                         time - d - 1,
@@ -115,8 +115,8 @@ fn max_value(
                             f_clone
                         },
                         distances,
-                        max_so_far,
                         e,
+                        // context,
                     )
                 } else {
                     0
@@ -124,7 +124,18 @@ fn max_value(
         })
         .max()
         .unwrap_or_default();
-    *max_so_far = (*max_so_far).max(out);
+    // context.replace_range(context.len() - 3..context.len(), "");
+    if e {
+        out = out.max(max_value(
+            26,
+            "AA".to_string(),
+            flowrates.clone(),
+            distances,
+            false,
+            // context,
+        ));
+    }
+    // println!("{time:0>2} {out:0>4} {context}");
     out
 }
 
@@ -153,8 +164,8 @@ mod part1 {
             "AA".to_string(),
             flowrates,
             &distances,
-            &mut 0,
             false,
+            // &mut "".to_string(),
         ))
     }
 }
@@ -162,7 +173,7 @@ mod part1 {
 mod part2 {
     use super::*;
 
-    const MAX_MINUTES: u32 = 30;
+    const MAX_MINUTES: u32 = 26;
     pub fn run(file: &str) -> Result<u32, Box<dyn Error>> {
         let input = read_file_static(file)?;
         let (flowrates, mut distances) = parse::parse_input(input);
@@ -184,8 +195,8 @@ mod part2 {
             "AA".to_string(),
             flowrates,
             &distances,
-            &mut 0,
             true,
+            // &mut "".to_string(),
         ))
     }
 }
@@ -220,9 +231,9 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn part2_ans() -> Result<(), Box<dyn Error>> {
-    //     assert_eq!(part2::run("input.txt", 4000000)?, 11558423398893);
-    //     Ok(())
-    // }
+    #[test]
+    fn part2_ans() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part2::run("input.txt")?, 2615);
+        Ok(())
+    }
 }
