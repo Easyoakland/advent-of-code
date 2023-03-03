@@ -89,6 +89,7 @@ fn max_value(
     flowrates: BTreeMap<String, u32>,
     distances: &BTreeMap<(String, String), u32>,
     max_so_far: &mut u32,
+    e: bool, // not cached as it is the same between runs
 ) -> u32 {
     let out = flowrates
         .iter()
@@ -101,8 +102,7 @@ fn max_value(
             let immediate_val = f * (time - d - 1); // Value from just the explored valve.
             immediate_val
             // If the maximum possible value from recursing is not > max_so_far then don't bother. Gives 2x speedup.
-                + if flowrates.values().fold(0, |acc, x| acc + x * time) + immediate_val
-                    >= *max_so_far
+                + if flowrates.len() > 1
                 {
                     // Largest possible value of still unexplored valves.
                     max_value(
@@ -116,6 +116,7 @@ fn max_value(
                         },
                         distances,
                         max_so_far,
+                        e,
                     )
                 } else {
                     0
@@ -153,6 +154,38 @@ mod part1 {
             flowrates,
             &distances,
             &mut 0,
+            false,
+        ))
+    }
+}
+
+mod part2 {
+    use super::*;
+
+    const MAX_MINUTES: u32 = 30;
+    pub fn run(file: &str) -> Result<u32, Box<dyn Error>> {
+        let input = read_file_static(file)?;
+        let (flowrates, mut distances) = parse::parse_input(input);
+        floyd_wershall(&flowrates, &mut distances); // calc distances
+
+        let distances = distances
+            .into_iter()
+            // .filter(|&((u, v), _)| flowrates[u] != 0 && flowrates[v] != 0)
+            .map(|((u, v), x)| ((u.to_string(), v.to_string()), x))
+            .collect::<BTreeMap<_, _>>();
+        // Remove zero valves (they're useless). Also convert indexes to Strings for max_value later
+        let flowrates = flowrates
+            .into_iter()
+            .filter(|&(_, f)| f != 0)
+            .map(|(v, f)| (v.to_string(), f))
+            .collect::<BTreeMap<_, _>>();
+        Ok(max_value(
+            MAX_MINUTES,
+            "AA".to_string(),
+            flowrates,
+            &distances,
+            &mut 0,
+            true,
         ))
     }
 }
@@ -181,11 +214,11 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn test_part2() -> Result<(), Box<dyn Error>> {
-    //     assert_eq!(part2::run("inputtest.txt", 20)?, 56000011);
-    //     Ok(())
-    // }
+    #[test]
+    fn test_part2() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part2::run("inputtest.txt")?, 1707);
+        Ok(())
+    }
 
     // #[test]
     // fn part2_ans() -> Result<(), Box<dyn Error>> {
