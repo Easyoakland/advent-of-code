@@ -1,5 +1,6 @@
 #[allow(unused_imports)]
-use advent_lib::{cord::Cord, dbc, parse::read_file_static};
+use advent_lib::dbc;
+use advent_lib::{cord::Cord, parse::read_file_static};
 use data::{Action, Rock};
 use std::{
     collections::{HashSet, VecDeque},
@@ -11,7 +12,7 @@ const LOGGING: bool = false;
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Part 1 answer: {:#?}", part1::run("input.txt")?);
-    // println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
+    println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
     Ok(())
 }
 
@@ -270,6 +271,69 @@ mod part1 {
             highlight_cells: HashSet::new(),
         };
         for i in 0..2022 {
+            // Each rock appears so that its left edge is two units away from the left wall and its bottom edge is three units above the highest rock in the room (or the floor, if there isn't one).
+            let mut rock = Rock {
+                kind: ((i % TYPES_OF_ROCK) + 1).into(),
+                cord: Cord(3, grid.highest + 4),
+            };
+
+            // DEBUG print
+            if LOGGING {
+                println!(
+                    "New Rock {}\n{}",
+                    i + 1,
+                    data::Grid {
+                        occupied_cells: grid.occupied_cells.clone(),
+                        highest: rock.cord.1 + 5,
+                        highlight_cells: rock.hitbox().collect(),
+                    }
+                );
+            }
+
+            // Repeatedly apply jet streams and gravity to move rock until it hits something.
+            drop_rock(&mut rock, &mut grid.occupied_cells, &mut actions);
+
+            // Update highest to highest including the newly placed rock.
+            grid.highest = grid
+                .highest
+                .max(rock.hitbox().fold(0, |acc, cord| acc.max(cord.1)));
+
+            // DEBUG print
+            if LOGGING {
+                println!(
+                    "New Rock {} Placed at Height {}\n{}",
+                    i + 1,
+                    grid.highest,
+                    {
+                        let mut out = grid.clone();
+                        out.highlight_cells.extend(rock.hitbox());
+                        out
+                    }
+                );
+                // println!("{}: {}", i + 1, grid.highest)
+                // println!("{}", grid.highest)
+            }
+        }
+        Ok(grid.highest)
+    }
+}
+
+mod part2 {
+    use super::*;
+    use crate::data::{Grid, TYPES_OF_ROCK};
+
+    pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
+        let input = read_file_static(file_name)?;
+        let mut actions = parse::parse_input(input);
+        let mut grid = Grid {
+            occupied_cells: Cord(0, 0).interpolate(&Cord(8, 0)).collect(),
+            highest: 0,
+            highlight_cells: HashSet::new(),
+        };
+        for i in 0..1000000000000 {
+            if i % 10000 == 0 {
+                println!("{i}");
+            }
             // Each rock appears so that its left edge is two units away from the left wall and its bottom edge is three units above the highest rock in the room (or the floor, if there isn't one).
             let mut rock = Rock {
                 kind: ((i % TYPES_OF_ROCK) + 1).into(),
