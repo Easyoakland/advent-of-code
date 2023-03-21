@@ -3,7 +3,7 @@ use advent_lib::dbc;
 use advent_lib::{cord::Cord, parse::read_file_static};
 use data::{Action, Rock};
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{BTreeSet, HashSet},
     error::Error,
 };
 
@@ -20,14 +20,14 @@ mod data {
     use super::*;
     use std::fmt::Display;
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum Action {
         Left,
         Right,
     }
 
     pub const TYPES_OF_ROCK: usize = 5;
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, Hash)]
     pub enum RockKind {
         One = 1,
         Two = 2,
@@ -55,7 +55,7 @@ mod data {
         }
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Hash)]
     pub struct Rock {
         pub kind: RockKind,
         pub cord: Cord<CordType>, // bottom left position
@@ -84,10 +84,10 @@ mod data {
         }
 
         /// Returns true if hitbox intersects occupied cells
-        fn hitbox_check(&self, occupied_cells: &HashSet<Cord<CordType>>) -> bool {
+        fn hitbox_check(&self, occupied_cells: &BTreeSet<Cord<CordType>>) -> bool {
             self.hitbox().any(|cord| occupied_cells.contains(&cord))
         }
-        pub fn fall(&mut self, occupied_cells: &HashSet<Cord<CordType>>) -> bool {
+        pub fn fall(&mut self, occupied_cells: &BTreeSet<Cord<CordType>>) -> bool {
             let proposed_next = {
                 let mut out = self.clone();
                 out.cord -= Cord(0, 1);
@@ -146,7 +146,7 @@ mod data {
 
     #[derive(Clone)]
     pub struct Grid {
-        pub occupied_cells: HashSet<Cord<CordType>>,
+        pub occupied_cells: BTreeSet<Cord<CordType>>,
         pub highlight_cells: HashSet<Cord<CordType>>,
         pub highest: usize,
     }
@@ -183,14 +183,12 @@ const CHAMBER_WIDTH: usize = 7;
 
 fn drop_rock(
     rock: &mut Rock,
-    occupied_cells: &mut HashSet<Cord<CordType>>,
-    actions: &mut VecDeque<Action>,
+    occupied_cells: &mut BTreeSet<Cord<CordType>>,
+    actions: &mut impl Iterator<Item = Action>,
 ) {
-    while let Some(action) = actions.pop_front() {
-        actions.push_back(action); // actions repeat instead of running out
+    while let Some(action) = actions.next() {
         match action {
             Action::Left => {
-                //DEBUG
                 if LOGGING {
                     print!("<");
                 }
@@ -204,7 +202,6 @@ fn drop_rock(
                 }
             }
             Action::Right => {
-                //DEBUG
                 if LOGGING {
                     print!(">")
                 };
@@ -219,35 +216,9 @@ fn drop_rock(
             }
         }
 
-        // // DEBUG print
-        // println!(
-        //     "stream\n{}",
-        //     data::Grid {
-        //         occupied_cells: {
-        //             let mut out = occupied_cells.clone();
-        //             out.extend(rock.hitbox());
-        //             out
-        //         },
-        //         highest: rock.cord.1 + 5,
-        //     }
-        // );
-
         if !rock.fall(occupied_cells) {
             break;
         }
-
-        // // DEBUG print
-        // println!(
-        //     "gravity\n{}",
-        //     data::Grid {
-        //         occupied_cells: {
-        //             let mut out = occupied_cells.clone();
-        //             out.extend(rock.hitbox());
-        //             out
-        //         },
-        //         highest: rock.cord.1 + 5,
-        //     }
-        // );
     }
 
     //DEBUG
@@ -264,7 +235,8 @@ mod part1 {
 
     pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
         let input = read_file_static(file_name)?;
-        let mut actions = parse::parse_input(input);
+        let actions = parse::parse_input(input);
+        let mut actions = actions.into_iter().cycle();
         let mut grid = Grid {
             occupied_cells: Cord(0, 0).interpolate(&Cord(8, 0)).collect(),
             highest: 0,
@@ -277,7 +249,6 @@ mod part1 {
                 cord: Cord(3, grid.highest + 4),
             };
 
-            // DEBUG print
             if LOGGING {
                 println!(
                     "New Rock {}\n{}",
@@ -298,7 +269,6 @@ mod part1 {
                 .highest
                 .max(rock.hitbox().fold(0, |acc, cord| acc.max(cord.1)));
 
-            // DEBUG print
             if LOGGING {
                 println!(
                     "New Rock {} Placed at Height {}\n{}",
@@ -319,32 +289,80 @@ mod part1 {
 }
 
 mod part2 {
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
+
     use super::*;
     use crate::data::{Grid, TYPES_OF_ROCK};
 
+    #[derive(Debug, Default, Clone)]
+    struct Cycle {
+        start_height: usize,
+        end_height: usize,
+        start_rnd: usize,
+        end_rnd: usize,
+    }
+
+    impl Cycle {
+        fn delta_height(&self) -> usize {
+            self.end_height - self.start_height
+        }
+        fn rnd_length(&self) -> usize {
+            self.end_rnd - self.start_rnd
+        }
+    }
+
+    /// Using knowledge of how much height is gained in a cycle fast forward as far as possible.
+    /// # Return
+    /// Returns (new_round, new_height)
+    #[must_use]
+    fn skip_simulation(
+        cycle: Cycle,
+        current_round: usize,
+        target_round: usize,
+        current_height: usize,
+    ) -> (usize, usize) {
+        let cycle_repeat_cnt = (target_round - current_round) / cycle.rnd_length();
+        (
+            current_round + cycle_repeat_cnt * cycle.rnd_length(),
+            current_height + cycle_repeat_cnt * cycle.delta_height(),
+        )
+    }
+
+    const TARGET_RND_NUM: usize = 1000000000000;
+
     pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
         let input = read_file_static(file_name)?;
-        let mut actions = parse::parse_input(input);
+        let actions = parse::parse_input(input);
+        let action_len = actions.len();
+        let mut actions = actions.into_iter().cycle();
         let mut grid = Grid {
             occupied_cells: Cord(0, 0).interpolate(&Cord(8, 0)).collect(),
             highest: 0,
             highlight_cells: HashSet::new(),
         };
-        for i in 0..1000000000000 {
-            if i % 10000 == 0 {
-                println!("{i}");
+        let mut cached_states = HashSet::new();
+        let mut highest_per_col = vec![0; CHAMBER_WIDTH];
+        let mut cycle: Cycle = Default::default();
+        let mut looking_for_cycle_end = false;
+        let mut skipped = false;
+        let mut rnd = 0;
+        while rnd < TARGET_RND_NUM {
+            if LOGGING && rnd % 100 == 0 {
+                println!("{rnd}");
             }
             // Each rock appears so that its left edge is two units away from the left wall and its bottom edge is three units above the highest rock in the room (or the floor, if there isn't one).
             let mut rock = Rock {
-                kind: ((i % TYPES_OF_ROCK) + 1).into(),
+                kind: ((rnd % TYPES_OF_ROCK) + 1).into(),
                 cord: Cord(3, grid.highest + 4),
             };
 
-            // DEBUG print
             if LOGGING {
                 println!(
                     "New Rock {}\n{}",
-                    i + 1,
+                    rnd + 1,
                     data::Grid {
                         occupied_cells: grid.occupied_cells.clone(),
                         highest: rock.cord.1 + 5,
@@ -360,12 +378,26 @@ mod part2 {
             grid.highest = grid
                 .highest
                 .max(rock.hitbox().fold(0, |acc, cord| acc.max(cord.1)));
+            for col in 1..=CHAMBER_WIDTH {
+                highest_per_col[col - 1] = grid
+                    .occupied_cells
+                    .iter()
+                    .filter(|&x| x.0 == col)
+                    .max_by_key(|x| x.1)
+                    .map(|&x| x)
+                    .unwrap_or_default()
+                    .1
+            }
 
-            // DEBUG print
+            // Clear rocks that are no longer relevant.
+            let min_col = *highest_per_col.iter().min().unwrap();
+            grid.occupied_cells.retain(|&x| x.1 >= min_col);
+
             if LOGGING {
+                println!("{:?}", highest_per_col);
                 println!(
                     "New Rock {} Placed at Height {}\n{}",
-                    i + 1,
+                    rnd + 1,
                     grid.highest,
                     {
                         let mut out = grid.clone();
@@ -373,9 +405,63 @@ mod part2 {
                         out
                     }
                 );
-                // println!("{}: {}", i + 1, grid.highest)
-                // println!("{}", grid.highest)
             }
+
+            // The things that dictate a particular round are the actions, shape of relevant rocks, and the currently dropping rock.
+            let round_hash = {
+                let mut hasher = DefaultHasher::default();
+                // The position in the actions is part of the information needed to uniquely identify state.
+                {
+                    let mut out = Vec::with_capacity(action_len);
+                    for _ in 0..action_len {
+                        out.push(actions.next().unwrap()); // Iterator loops one full cycle so it is not impacted by this.
+                    }
+                    out
+                }
+                .hash(&mut hasher);
+                grid.occupied_cells
+                    .iter()
+                    .map(|&c| c - Cord(0, min_col)) // Normalize y value so lowest occupied cell is at 0 for hash purposes.
+                    .collect::<BTreeSet<_>>()
+                    .hash(&mut hasher);
+                rock.kind.hash(&mut hasher); // Only care about rock's type not its position
+                hasher.finish()
+            };
+
+            // If haven't skipped forward in the simulation yet and the round state matches a previous round's.
+            if !skipped && cached_states.contains(&round_hash) {
+                // Either start measuring the cycle that is created
+                if !looking_for_cycle_end {
+                    cycle.start_height = grid.highest;
+                    cycle.start_rnd = rnd;
+                    looking_for_cycle_end = true;
+                    cached_states.clear(); // Don't match again until another cycle goes.
+                }
+                // Or if already started a cycle, measure the cycle and skip with that information.
+                else {
+                    cycle.end_height = grid.highest;
+                    cycle.end_rnd = rnd;
+                    cycle.rnd_length();
+                    let (new_round, new_height) =
+                        skip_simulation(cycle.clone(), rnd, TARGET_RND_NUM - 1, grid.highest); // Since rounds are 0 indexed number -1 is actual target
+                    rnd = new_round;
+                    let old_heighest = grid.highest;
+                    // Shift all occupied cells upward the amount that was skipped.
+                    let mut to_add = Vec::new();
+                    for cell in &grid.occupied_cells {
+                        to_add.push(Cord(cell.0, cell.1 + new_height - old_heighest));
+                    }
+                    grid.occupied_cells.clear();
+                    grid.occupied_cells.extend(to_add.iter());
+                    grid.highest = new_height;
+                    skipped = true;
+                }
+            }
+
+            // Remember the state for cycle detection.
+            cached_states.insert(round_hash);
+
+            rnd += 1;
         }
         Ok(grid.highest)
     }
@@ -384,12 +470,12 @@ mod part2 {
 mod parse {
     use super::*;
 
-    pub fn parse_input(input: &str) -> VecDeque<Action> {
-        let mut actions = VecDeque::new();
+    pub fn parse_input(input: &str) -> Vec<Action> {
+        let mut actions = Vec::new();
         for c in input.chars() {
             match c {
-                '<' => actions.push_back(Action::Left),
-                '>' => actions.push_back(Action::Right),
+                '<' => actions.push(Action::Left),
+                '>' => actions.push(Action::Right),
                 '\r' | '\n' => break,
                 x => unimplemented!("Unexpected character '{}'?", x),
             }
@@ -422,15 +508,15 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn test_part2() -> Result<(), Box<dyn Error>> {
-    //     assert_eq!(part2::run("inputtest.txt")?, 1707);
-    //     Ok(())
-    // }
+    #[test]
+    fn test_part2() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part2::run("inputtest.txt")?, 1514285714288);
+        Ok(())
+    }
 
-    // #[test]
-    // fn part2_ans() -> Result<(), Box<dyn Error>> {
-    //     assert_eq!(part2::run("input.txt")?, 2615);
-    //     Ok(())
-    // }
+    #[test]
+    fn part2_ans() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part2::run("input.txt")?, 1560919540245);
+        Ok(())
+    }
 }
