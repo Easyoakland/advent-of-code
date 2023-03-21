@@ -1,5 +1,6 @@
 use itertools::{Itertools, Product};
-use num::{iter::Range, range, range_inclusive, PrimInt, Zero};
+use num_iter::{range, range_inclusive, Range};
+use num_traits::{cast, PrimInt, Zero};
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -31,10 +32,10 @@ impl<Datatype: CordData> Iterator for MooreNeighborhoodIterator<Datatype> {
         // Each radius increases number of cells in each dimension by 2 (each extent direction by 1) starting with 1 cell at radius = 1
         while let Some((i, j)) = self.iterator.next() {
             let x = self.cord.0.checked_sub(
-                &num::cast(self.radius).expect("Can't cast the radius to cord's datatype."),
+                &cast(self.radius).expect("Can't cast the radius to cord's datatype."),
             );
             let y = self.cord.1.checked_sub(
-                &num::cast(self.radius).expect("Can't cast the radius to cord's datatype."),
+                &cast(self.radius).expect("Can't cast the radius to cord's datatype."),
             );
             let (x, y) = match (x, y) {
                 (Some(a), Some(b)) => (a.add(i), b.add(j)),
@@ -95,7 +96,7 @@ where
     /// Radius is manhattan distance from center to edge.
     /// Moore neighborhood is a square formed by the extents of the Neumann neighborhood.
     pub fn moore_neighborhood(&self, radius: usize) -> impl Iterator<Item = Cord<Datatype>> {
-        let dim_max = num::cast::<usize, Datatype>(radius + radius + 1)
+        let dim_max = cast::<usize, Datatype>(radius + radius + 1)
             .expect("Can't convert 2*radius + 1 into cord's datatype. Does it fit?");
         let iterator = range(Zero::zero(), dim_max).cartesian_product(range(Zero::zero(), dim_max));
         MooreNeighborhoodIterator {
@@ -111,7 +112,7 @@ where
         let neighbors = self.moore_neighborhood(radius);
         neighbors.filter(move |&x| {
             x.manhattan_distance(&self)
-                <= num::cast(radius).expect("Can't convert radius to cord's datatype.")
+                <= cast(radius).expect("Can't convert radius to cord's datatype.")
         })
     }
 
