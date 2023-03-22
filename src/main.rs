@@ -12,12 +12,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 mod data {
+    use core::panic;
+
     use advent_lib::cord::abs_diff;
     use derive_more::{Add, Sub};
 
     use super::*;
 
-    type Datatype = usize;
+    type Datatype = isize;
     #[derive(Clone, Copy, Debug, Default, Add, Sub, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Voxel(Datatype, Datatype, Datatype);
     impl From<(Datatype, Datatype, Datatype)> for Voxel {
@@ -47,7 +49,7 @@ mod data {
 
         /// Radius is manhattan distance from center to edge.
         /// Moore neighborhood is a square formed by the extents of the Neumann neighborhood.
-        pub fn moore_neighborhood(&self, radius: usize) -> impl Iterator<Item = Voxel> + '_ {
+        pub fn moore_neighborhood(&self, radius: isize) -> impl Iterator<Item = Voxel> + '_ {
             let dim_max = radius + radius + 1;
             (0..dim_max)
                 .cartesian_product(0..dim_max)
@@ -61,7 +63,7 @@ mod data {
                         let z = self.2.checked_sub(radius);
                         let (x, y, z) = match (x, y, z) {
                             (Some(a), Some(b), Some(c)) => (a + i, b + j, c + k),
-                            _ => return None,
+                            _ => panic!("datatype can't hold neighborhood"),
                         };
 
                         // Don't add self to neighbor list.
@@ -76,7 +78,7 @@ mod data {
 
         /// Radius is manhattan distance of furthest neighbors.
         /// Neumann neighborhood is all cells a manhattan distance of the radius or smaller.
-        pub fn neumann_neighborhood(&self, radius: usize) -> impl Iterator<Item = Voxel> + '_ {
+        pub fn neumann_neighborhood(&self, radius: isize) -> impl Iterator<Item = Voxel> + '_ {
             let neighbors = self.moore_neighborhood(radius);
             neighbors.filter(move |x| x.manhattan_distance(&self) <= radius)
         }
@@ -118,12 +120,15 @@ mod part1 {
         voxels.sort();
         // For every voxel
         for (i, voxel) in voxels.iter().enumerate() {
+            eprintln!("{:?}", &voxel);
             // It is exposed on, 6 - the number of neighboring voxels that are in the blob, faces.
             for neighbor in voxel.neumann_neighborhood(1) {
-                if let Ok(_) = voxels.binary_search(&neighbor) {
+                if let Ok(_idx) = voxels.binary_search(&neighbor) {
                     voxel_exposed[i] -= 1;
+                    eprintln!("{:?}", voxels[_idx]);
                 }
             }
+            eprintln!("{:?}", voxel_exposed[i]);
         }
         Ok(voxel_exposed.iter().sum())
     }
@@ -148,10 +153,22 @@ mod tests {
     }
 
     #[test]
+    fn test_part1_2() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part1::run("inputtest2.txt")?, 18 + 18 - 4);
+        Ok(())
+    }
+
+    #[test]
+    fn test_part1_3() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part1::run("inputtest3.txt")?, 10);
+        Ok(())
+    }
+
+    #[test]
     fn part1_ans() -> Result<(), Box<dyn Error>> {
         assert!(dbc!(part1::run("input.txt")?) < 12306);
         assert!(part1::run("input.txt")? < 3548);
-        // assert_eq!(part1::run("input.txt")?, 3151);
+        assert_eq!(part1::run("input.txt")?, 3542);
         Ok(())
     }
 
