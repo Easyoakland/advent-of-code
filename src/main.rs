@@ -7,13 +7,12 @@ use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Part 1 answer: {:#?}", part1::run("input.txt")?);
-    // println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
+    println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
     Ok(())
 }
 
+mod astar;
 mod data {
-    use core::panic;
-
     use advent_lib::cord::abs_diff;
     use derive_more::{Add, Sub};
 
@@ -21,7 +20,7 @@ mod data {
 
     type Datatype = isize;
     #[derive(Clone, Copy, Debug, Default, Add, Sub, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct Voxel(Datatype, Datatype, Datatype);
+    pub struct Voxel(pub Datatype, pub Datatype, pub Datatype);
     impl From<(Datatype, Datatype, Datatype)> for Voxel {
         fn from(value: (Datatype, Datatype, Datatype)) -> Self {
             Voxel(value.0, value.1, value.2)
@@ -49,7 +48,10 @@ mod data {
 
         /// Radius is manhattan distance from center to edge.
         /// Moore neighborhood is a square formed by the extents of the Neumann neighborhood.
-        pub fn moore_neighborhood(&self, radius: isize) -> impl Iterator<Item = Voxel> + '_ {
+        pub fn moore_neighborhood(
+            &self,
+            radius: isize,
+        ) -> impl Iterator<Item = Voxel> + Clone + '_ {
             let dim_max = radius + radius + 1;
             (0..dim_max)
                 .cartesian_product(0..dim_max)
@@ -78,7 +80,10 @@ mod data {
 
         /// Radius is manhattan distance of furthest neighbors.
         /// Neumann neighborhood is all cells a manhattan distance of the radius or smaller.
-        pub fn neumann_neighborhood(&self, radius: isize) -> impl Iterator<Item = Voxel> + '_ {
+        pub fn neumann_neighborhood(
+            &self,
+            radius: isize,
+        ) -> impl Iterator<Item = Voxel> + Clone + '_ {
             let neighbors = self.moore_neighborhood(radius);
             neighbors.filter(move |x| x.manhattan_distance(&self) <= radius)
         }
@@ -116,19 +121,97 @@ mod part1 {
     pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
         let input = read_file_static(file_name)?;
         let (_, mut voxels) = parse_input(input)?;
-        let mut voxel_exposed = vec![6usize; voxels.len()];
+        let mut voxel_exposed = vec![0usize; voxels.len()];
+        // Sort so faster to find voxels later.
         voxels.sort();
-        // For every voxel
+        // Don't mutate further.
+        let voxels = voxels;
+        let non_blob_neighbors = |voxel: Voxel| {
+            voxel
+                .neumann_neighborhood(1)
+                .filter(|x| voxels.binary_search(x).is_err()) // filter out blob elements from neighbors
+                .collect::<Vec<_>>()
+                .into_iter()
+        };
+        // For every voxel.
         for (i, voxel) in voxels.iter().enumerate() {
-            eprintln!("{:?}", &voxel);
-            // It is exposed on, 6 - the number of neighboring voxels that are in the blob, faces.
-            for neighbor in voxel.neumann_neighborhood(1) {
-                if let Ok(_idx) = voxels.binary_search(&neighbor) {
-                    voxel_exposed[i] -= 1;
-                    eprintln!("{:?}", voxels[_idx]);
+            // It is exposed on 6 - the number of neighboring voxels that are in the blob faces.
+            for _neighbor in non_blob_neighbors(*voxel) {
+                // If that neighbor actually exists in the blob.
+                voxel_exposed[i] += 1;
+            }
+        }
+        Ok(voxel_exposed.iter().sum())
+    }
+}
+
+mod part2 {
+    use super::*;
+    use crate::{astar::astar, parse::parse_input};
+
+    pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
+        let input = read_file_static(file_name)?;
+        let (_, mut voxels) = parse_input(input)?;
+        let mut voxel_exposed = vec![0usize; voxels.len()];
+        // Sort so faster to find voxels later.
+        voxels.sort();
+        let (min_x, max_x) = (
+            voxels.iter().min_by(|x, y| x.0.cmp(&y.0)).unwrap().0,
+            voxels.iter().max_by(|x, y| x.0.cmp(&y.0)).unwrap().0,
+        );
+        let (min_y, max_y) = (
+            voxels.iter().min_by(|x, y| x.1.cmp(&y.1)).unwrap().1,
+            voxels.iter().max_by(|x, y| x.1.cmp(&y.1)).unwrap().1,
+        );
+        let (min_z, max_z) = (
+            voxels.iter().min_by(|x, y| x.2.cmp(&y.2)).unwrap().2,
+            voxels.iter().max_by(|x, y| x.2.cmp(&y.2)).unwrap().2,
+        );
+        // Don't mutate further.
+        let voxels = voxels;
+        dbg!(voxels.len());
+        // TODO make correct
+        // Don't weight neighbors
+        let non_blob_neighbors = |voxel: Voxel| {
+            voxel
+                .neumann_neighborhood(1)
+                // Filter out blob elements from neighbors.
+                .filter(|node| voxels.binary_search(node).is_err())
+                // Filter out nodes far beyond the blob leaving only the blob and immediate exposing air.
+                // For example in 1D everything within | would be a valid neighbor: A A | A X A X X A | A A
+                .filter(|node| {
+                    min_x - 1 <= node.0
+                        && node.0 <= max_x + 1
+                        && min_y - 1 <= node.1
+                        && node.1 <= max_y + 1
+                        && min_z - 1 <= node.2
+                        && node.2 <= max_z + 1
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
+        };
+        // For every voxel.
+        for (i, voxel) in voxels.iter().enumerate() {
+            if i % 10 == 0 {
+                dbg!(i);
+            }
+            // eprintln!("{:?}", &voxel);
+            // For each non-blob face/neighbor.
+            for neighbor in non_blob_neighbors(*voxel) {
+                // If that neighbor can be reached from outside the blob without crossing through the blob (not internal air pocket).
+                if astar::<Voxel, isize, _>(
+                    (max_x + 1, max_y + 1, max_z + 1).into(),
+                    neighbor,
+                    non_blob_neighbors,
+                    |neighbor: Voxel| neighbor.manhattan_distance(voxel),
+                    |_, _| 1,
+                )
+                .is_some()
+                {
+                    voxel_exposed[i] += 1;
                 }
             }
-            eprintln!("{:?}", voxel_exposed[i]);
+            // eprintln!("{:?}", voxel_exposed[i]);
         }
         Ok(voxel_exposed.iter().sum())
     }
@@ -172,12 +255,12 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn test_part2() -> Result<(), Box<dyn Error>> {
-    // assert_eq!(part2::run("inputtest.txt")?, 1514285714288);
-    // Ok(())
-    // }
-    //
+    #[test]
+    fn test_part2() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part2::run("inputtest.txt")?, 58);
+        Ok(())
+    }
+
     // #[test]
     // fn part2_ans() -> Result<(), Box<dyn Error>> {
     // assert_eq!(part2::run("input.txt")?, 1560919540245);
