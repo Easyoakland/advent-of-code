@@ -43,3 +43,4 @@ In the larger example above, exactly one cube of air is trapped within the lava 
 
 What is the exterior surface area of your scanned lava droplet?
 
+That's the right answer! You are one gold star closer to collecting enough star fruit.
