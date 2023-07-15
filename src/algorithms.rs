@@ -1,11 +1,12 @@
-use num_traits::Zero;
+use num_traits::{bounds::UpperBounded, SaturatingAdd, Zero};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     hash::Hash,
     ops::Add,
 };
 
-/// Calculate the distance from start to end and the path of two nodes.
+/// Calculate the distance from start to end.
+// TODO and the path of two nodes
 /// - The potential function must not overestimate distance between nodes and must not be negative.
 /// - Edge weights must be positive.
 /// - A potential of `|_| 0` is equivalent to Dijkstra
@@ -65,4 +66,28 @@ where
 
     // If not found after full search then no valid path/distance.
     None
+}
+
+/// Calculate the distance between all nodes to all other nodes.
+/// [Floyd-Warshall](https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm).
+/// Assumes that all nodes are connected through some sequence of edges.
+pub fn floyd_wershall<Node, Distance>(distances: &mut BTreeMap<(Node, Node), Distance>)
+where
+    Node: Ord + Copy,
+    Distance: UpperBounded + Ord + SaturatingAdd + Copy,
+{
+    let all_nodes = distances.keys().map(|x| x.0).collect::<Vec<_>>();
+    for &k in &all_nodes {
+        for &j in &all_nodes {
+            for &i in &all_nodes {
+                // Initialize missing distances with infinity.
+                let i_k = *distances.entry((i, k)).or_insert(Distance::max_value());
+                let k_j = *distances.entry((k, j)).or_insert(Distance::max_value());
+                let i_j = distances.entry((i, j)).or_insert(Distance::max_value());
+
+                // Insert shorter distance from i to j through k distance if it is shorter than shortest from i to j.
+                *i_j = (*i_j).min(i_k.saturating_add(&k_j));
+            }
+        }
+    }
 }
