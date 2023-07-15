@@ -208,7 +208,7 @@ mod part2 {
                         (max_x + 1, max_y + 1, max_z + 1).into(),
                         neighbor,
                         non_blob_neighbors,
-                        |neighbor: Voxel| neighbor.manhattan_distance(voxel),
+                        |_| 0, // 0 is faster than -> `|neighbor: Voxel| neighbor.manhattan_distance(voxel)`. I guess the heuristic is bad?
                         |_, _| 1,
                     )
                     .is_some()
