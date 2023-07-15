@@ -1,5 +1,5 @@
 #[allow(unused_imports)]
-use advent_lib::{self, dbc, parse::read_file_static};
+use advent_lib::{algorithms, dbc, parse::read_file_static};
 use cached::proc_macro::cached;
 use std::{
     collections::{hash_map::DefaultHasher, BTreeMap},
@@ -44,34 +44,6 @@ mod parse {
         }
 
         (flowrates, distances)
-    }
-}
-
-fn floyd_wershall<'a>(
-    flowrates: &'a BTreeMap<&'a str, u32>,
-    distances: &mut BTreeMap<(&'a str, &'a str), u32>,
-) {
-    // Floyd-Warshall. Could have done dijkstra but learning new algorithm, its simple, and everyone online referred to it for some reason even though its slower than dijkstra.
-    for &k in flowrates.keys() {
-        for &j in flowrates.keys() {
-            for &i in flowrates.keys() {
-                // Initialize distances with infinity.
-                if distances.get(&(i, j)) == None {
-                    distances.insert((i, j), u32::MAX);
-                }
-                if distances.get(&(i, k)) == None {
-                    distances.insert((i, j), u32::MAX);
-                }
-                if distances.get(&(k, j)) == None {
-                    distances.insert((i, j), u32::MAX);
-                }
-
-                distances.insert(
-                    (i, j),
-                    distances[&(i, j)].min(distances[&(i, k)].saturating_add(distances[&(k, j)])),
-                );
-            }
-        }
     }
 }
 
@@ -146,7 +118,7 @@ mod part1 {
     pub fn run(file: &str) -> Result<u32, Box<dyn Error>> {
         let input = read_file_static(file)?;
         let (flowrates, mut distances) = parse::parse_input(input);
-        floyd_wershall(&flowrates, &mut distances); // calc distances
+        algorithms::floyd_warshall(flowrates.keys().copied(), &mut distances); // calc distances
 
         let distances = distances
             .into_iter()
@@ -177,7 +149,7 @@ mod part2 {
     pub fn run(file: &str) -> Result<u32, Box<dyn Error>> {
         let input = read_file_static(file)?;
         let (flowrates, mut distances) = parse::parse_input(input);
-        floyd_wershall(&flowrates, &mut distances); // calc distances
+        algorithms::floyd_warshall(flowrates.keys().copied(), &mut distances); // calc distances
 
         let distances = distances
             .into_iter()
