@@ -1,7 +1,10 @@
 use crate::data::Voxel;
 #[allow(unused_imports)]
-use advent_lib::dbc;
-use advent_lib::parse::{parse_from, read_file_static};
+use advent_lib::{
+    algorithms::astar,
+    dbc,
+    parse::{parse_from, read_file_static},
+};
 use itertools::Itertools;
 use std::error::Error;
 
@@ -11,7 +14,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-mod astar;
 mod data {
     use advent_lib::cord::abs_diff;
     use derive_more::{Add, Sub};
@@ -147,7 +149,7 @@ mod part1 {
 
 mod part2 {
     use super::*;
-    use crate::{astar::astar, parse::parse_input};
+    use crate::parse::parse_input;
     use rayon::prelude::{ParallelBridge, ParallelIterator};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -157,6 +159,9 @@ mod part2 {
         let voxel_exposed = ((0..voxels.len()).map(|_| AtomicUsize::new(0))).collect::<Vec<_>>();
         // Sort so faster to find voxels later.
         voxels.sort();
+        // Don't mutate further.
+        let voxels = voxels;
+
         let (min_x, max_x) = (
             voxels.iter().min_by(|x, y| x.0.cmp(&y.0)).unwrap().0,
             voxels.iter().max_by(|x, y| x.0.cmp(&y.0)).unwrap().0,
@@ -169,9 +174,8 @@ mod part2 {
             voxels.iter().min_by(|x, y| x.2.cmp(&y.2)).unwrap().2,
             voxels.iter().max_by(|x, y| x.2.cmp(&y.2)).unwrap().2,
         );
-        // Don't mutate further.
-        let voxels = voxels;
-        dbg!(voxels.len());
+
+        println!("There are {} voxels", voxels.len());
         // TODO make correct
         // Don't weight neighbors
         let non_blob_neighbors = |voxel: Voxel| {
@@ -198,8 +202,8 @@ mod part2 {
             .enumerate()
             .par_bridge() // This takes a long time (2048 astar searches (1 per voxel) * ~19^3 voxels = ~14 mil distance checks). The parallelism helps somewhat.
             .for_each(|(i, voxel)| {
-                if i % 10 == 0 {
-                    dbg!(i);
+                if i % 100 == 0 {
+                    println!("Checked first {i} voxels");
                 }
                 // For each non-blob face/neighbor.
                 non_blob_neighbors(*voxel).for_each(|neighbor| {
@@ -217,8 +221,7 @@ mod part2 {
                     }
                 })
             });
-        let out = voxel_exposed.into_iter().map(|x| x.into_inner()).sum();
-        Ok(out)
+        Ok(voxel_exposed.into_iter().map(|x| x.into_inner()).sum())
     }
 }
 
