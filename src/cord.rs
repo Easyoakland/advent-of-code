@@ -41,14 +41,14 @@ impl<Datatype: CordData> Iterator for MooreNeighborhoodIterator<Datatype> {
                 (Some(a), Some(b)) => (a.checked_add(&i), b.checked_add(&j)),
                 _ => panic!("\
 The moore neighborhood goes below the datatype's limits. \
-Brach type_bounded_cord implemented fix for this with artificial limits based on datatype but decided too much of footgun.\
+Branch type_bounded_cord implemented fix for this with artificial limits based on datatype but decided too much of footgun.\
 Better to panic than silently ignore neighbors that can't be represented with datatype."),
             };
 
             let (x,y) = match (x,y) {
                 (Some(a), Some(b)) => (a,b),
                 _ => panic!("\
-The moore neighborhood goes above the datatype's limits.  \
+The moore neighborhood goes above the datatype's limits. \
 Branch type_bounded_cord implemented fix for this with artificial limits based on datatype but decided too much of footgun.\
 Better to panic than silently ignore neighbors that can't be represented with datatype."),
             };
