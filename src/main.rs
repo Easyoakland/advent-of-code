@@ -148,11 +148,13 @@ mod part1 {
 mod part2 {
     use super::*;
     use crate::{astar::astar, parse::parse_input};
+    use rayon::prelude::{ParallelBridge, ParallelIterator};
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
         let input = read_file_static(file_name)?;
         let (_, mut voxels) = parse_input(input)?;
-        let mut voxel_exposed = vec![0usize; voxels.len()];
+        let voxel_exposed = ((0..voxels.len()).map(|_| AtomicUsize::new(0))).collect::<Vec<_>>();
         // Sort so faster to find voxels later.
         voxels.sort();
         let (min_x, max_x) = (
@@ -191,29 +193,32 @@ mod part2 {
                 .into_iter()
         };
         // For every voxel.
-        for (i, voxel) in voxels.iter().enumerate() {
-            if i % 10 == 0 {
-                dbg!(i);
-            }
-            // eprintln!("{:?}", &voxel);
-            // For each non-blob face/neighbor.
-            for neighbor in non_blob_neighbors(*voxel) {
-                // If that neighbor can be reached from outside the blob without crossing through the blob (not internal air pocket).
-                if astar::<Voxel, isize, _>(
-                    (max_x + 1, max_y + 1, max_z + 1).into(),
-                    neighbor,
-                    non_blob_neighbors,
-                    |neighbor: Voxel| neighbor.manhattan_distance(voxel),
-                    |_, _| 1,
-                )
-                .is_some()
-                {
-                    voxel_exposed[i] += 1;
+        voxels
+            .iter()
+            .enumerate()
+            .par_bridge() // This takes a long time (2048 astar searches (1 per voxel) * ~19^3 voxels = ~14 mil distance checks). The parallelism helps somewhat.
+            .for_each(|(i, voxel)| {
+                if i % 10 == 0 {
+                    dbg!(i);
                 }
-            }
-            // eprintln!("{:?}", voxel_exposed[i]);
-        }
-        Ok(voxel_exposed.iter().sum())
+                // For each non-blob face/neighbor.
+                non_blob_neighbors(*voxel).for_each(|neighbor| {
+                    // If that neighbor can be reached from outside the blob without crossing through the blob (not internal air pocket).
+                    if astar::<Voxel, isize, _>(
+                        (max_x + 1, max_y + 1, max_z + 1).into(),
+                        neighbor,
+                        non_blob_neighbors,
+                        |neighbor: Voxel| neighbor.manhattan_distance(voxel),
+                        |_, _| 1,
+                    )
+                    .is_some()
+                    {
+                        voxel_exposed[i].fetch_add(1, Ordering::Relaxed);
+                    }
+                })
+            });
+        let out = voxel_exposed.into_iter().map(|x| x.into_inner()).sum();
+        Ok(out)
     }
 }
 
@@ -261,9 +266,9 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn part2_ans() -> Result<(), Box<dyn Error>> {
-    // assert_eq!(part2::run("input.txt")?, 1560919540245);
-    // Ok(())
-    // }
+    #[test]
+    fn part2_ans() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part2::run("input.txt")?, 2080);
+        Ok(())
+    }
 }
