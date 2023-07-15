@@ -71,15 +71,15 @@ where
 /// Calculate the distance between all nodes to all other nodes.
 /// [Floyd-Warshall](https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm).
 /// Assumes that all nodes are connected through some sequence of edges.
-pub fn floyd_wershall<Node, Distance>(distances: &mut BTreeMap<(Node, Node), Distance>)
+pub fn floyd_warshall<Node, Distance, I>(keys: I, distances: &mut BTreeMap<(Node, Node), Distance>)
 where
     Node: Ord + Copy,
     Distance: UpperBounded + Ord + SaturatingAdd + Copy,
+    I: Iterator<Item = Node> + Clone,
 {
-    let all_nodes = distances.keys().map(|x| x.0).collect::<Vec<_>>();
-    for &k in &all_nodes {
-        for &j in &all_nodes {
-            for &i in &all_nodes {
+    for k in keys.clone() {
+        for j in keys.clone() {
+            for i in keys.clone() {
                 // Initialize missing distances with infinity.
                 let i_k = *distances.entry((i, k)).or_insert(Distance::max_value());
                 let k_j = *distances.entry((k, j)).or_insert(Distance::max_value());
