@@ -6,7 +6,7 @@ use std::{
     array,
     fmt::Debug,
     iter::Sum,
-    ops::{Add, Sub},
+    ops::{Add, AddAssign, Sub, SubAssign},
 };
 
 pub fn abs_diff<T: Sub<Output = T> + PartialOrd>(x: T, y: T) -> T {
@@ -38,6 +38,35 @@ where
 
     fn add(self, rhs: Self) -> Self::Output {
         self.apply(rhs, T::add)
+    }
+}
+
+impl<T, const DIM: usize> AddAssign for Cord<T, DIM>
+where
+    T: CordData,
+{
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
+    }
+}
+
+impl<T, const DIM: usize> Sub for Cord<T, DIM>
+where
+    T: CordData,
+{
+    type Output = Cord<T, DIM>;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        self.apply(rhs, T::sub)
+    }
+}
+
+impl<T, const DIM: usize> SubAssign for Cord<T, DIM>
+where
+    T: CordData,
+{
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = *self - rhs
     }
 }
 
