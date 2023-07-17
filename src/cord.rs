@@ -1,5 +1,4 @@
 use derive_more::{Deref, DerefMut};
-use itertools::Itertools;
 use num_iter::range_inclusive;
 use num_traits::{cast, PrimInt, Zero};
 use std::{
@@ -70,14 +69,17 @@ where
     }
 }
 
-pub struct MooreNeighborhoodIterator<T: CordData, const DIM: usize> {
-    iterator: Box<dyn Iterator<Item = Cord<T, DIM>>>,
+#[derive(Clone, Debug)]
+pub struct MooreNeighborhoodIterator<I, T: CordData, const DIM: usize> {
+    iterator: I,
     cord: Cord<T, DIM>,
     radius: usize,
 }
 
-impl<Datatype: CordData, const DIM: usize> Iterator for MooreNeighborhoodIterator<Datatype, DIM> {
-    type Item = Cord<Datatype, DIM>;
+impl<I: Iterator<Item = Cord<T, DIM>>, T: CordData, const DIM: usize> Iterator
+    for MooreNeighborhoodIterator<I, T, DIM>
+{
+    type Item = Cord<T, DIM>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // Goes from left to right and from top to bottom generating neighbor cords.
@@ -106,51 +108,34 @@ impl<Datatype: CordData, const DIM: usize> Iterator for MooreNeighborhoodIterato
     }
 }
 
-impl<Datatype, const DIM: usize> Cord<Datatype, DIM>
+impl<T, const DIM: usize> Cord<T, DIM>
 where
-    Datatype: CordData + 'static,
+    T: CordData,
 {
-    pub fn apply<O>(self, other: Self, func: impl Fn(Datatype, Datatype) -> O) -> Cord<O, DIM> {
+    pub fn apply<O>(self, other: Self, func: impl Fn(T, T) -> O) -> Cord<O, DIM> {
         let mut other = other.0.into_iter();
         Cord(
             self.0
                 .map(|x| func(x, other.next().expect("Same length arrays"))),
         )
     }
-    pub fn manhattan_distance(self, other: &Self) -> Datatype {
-        let diff_per_axis = self.apply(*other, abs_diff::<Datatype>);
+    pub fn manhattan_distance(self, other: &Self) -> T {
+        let diff_per_axis = self.apply(*other, abs_diff::<T>);
         diff_per_axis.0.into_iter().sum()
     }
 
     /// Radius is manhattan distance from center to edge.
     /// Moore neighborhood is a square formed by the extents of the Neumann neighborhood.
-    pub fn moore_neighborhood(&self, radius: usize) -> MooreNeighborhoodIterator<Datatype, DIM> {
-        let dim_max = cast::<usize, Datatype>(radius + radius)
-            .expect("Can't convert 2*radius + 1 into cord's datatype.");
+    pub fn moore_neighborhood(
+        &self,
+        radius: usize,
+    ) -> MooreNeighborhoodIterator<impl Iterator<Item = Cord<T, DIM>> + Clone, T, DIM> {
+        let dim_max = cast::<usize, T>(radius + radius)
+            .expect("Can't convert radius + radius into cord's datatype.");
 
-        // TODO fix below to use NDCartesianProduct
-        let iterator: Box<dyn Iterator<Item = Cord<Datatype, DIM>>> = {
-            let n_dimension = DIM;
-
-            // Setup 0th dimension.
-            let iterator = Box::new(range_inclusive(Zero::zero(), dim_max).map(|x| {
-                let mut array = [Zero::zero(); DIM];
-                array[0] = x;
-                array
-            }));
-            // Setup further dimensions.
-            let mut iter: Box<dyn Iterator<Item = [Datatype; DIM]>> = iterator;
-            for i in 1..n_dimension {
-                iter = Box::new(
-                    iter.cartesian_product(range_inclusive(Zero::zero(), dim_max))
-                        .map(move |mut x| {
-                            x.0[i] = x.1;
-                            x.0
-                        }),
-                );
-            }
-            Box::new(iter.map(Cord))
-        };
+        let iterator =
+            NDCartesianProduct::new(array::from_fn(|_| range_inclusive(Zero::zero(), dim_max)))
+                .map(Cord);
 
         MooreNeighborhoodIterator {
             iterator,
@@ -161,10 +146,7 @@ where
 
     /// Radius is manhattan distance of furthest neighbors.
     /// Neumann neighborhood is all cells a manhattan distance of the radius or smaller.
-    pub fn neumann_neighborhood(
-        &self,
-        radius: usize,
-    ) -> impl Iterator<Item = Cord<Datatype, DIM>> + '_ {
+    pub fn neumann_neighborhood(&self, radius: usize) -> impl Iterator<Item = Cord<T, DIM>> + '_ {
         let neighbors = self.moore_neighborhood(radius);
         neighbors.filter(move |&x| {
             x.manhattan_distance(&self)
@@ -173,7 +155,7 @@ where
     }
 
     /// Returns a vector of every cordinate with an x or y value between self and other inclusive.
-    pub fn interpolate(&self, other: &Self) -> impl Iterator<Item = Cord<Datatype, DIM>> {
+    pub fn interpolate(&self, other: &Self) -> impl Iterator<Item = Cord<T, DIM>> {
         // Use min and max so range doesn't silently emit no values (high..low is length 0 range)
         let ranges = array::from_fn(|i| {
             range_inclusive(self.0[i].min(other.0[i]), self.0[i].max(other.0[i]))
@@ -230,7 +212,8 @@ where
 }
 
 /// N dimensional product in lexicographical order
-struct NDCartesianProduct<I, const N: usize>
+#[derive(Clone, Debug)]
+pub struct NDCartesianProduct<I, const N: usize>
 where
     I: Iterator,
 {
