@@ -1,3 +1,4 @@
+use crate::iters::NDCartesianProduct;
 use derive_more::{Deref, DerefMut};
 use num_iter::range_inclusive;
 use num_traits::{cast, PrimInt, Zero};
@@ -17,9 +18,12 @@ pub fn abs_diff<T: Sub<Output = T> + PartialOrd>(x: T, y: T) -> T {
 }
 
 // Trait that allows easily adding generic bounds on cord's datatype.
-pub trait CordData: PrimInt + Sum + 'static + Debug {}
-impl<T: PrimInt + Sum + 'static + Debug> CordData for T {}
+pub trait CordData: PrimInt + Sum + 'static {}
+impl<T: PrimInt + Sum + 'static> CordData for T {}
 
+/// Newtype on n dimensional arrays representing coordinates in a grid-like space.
+///
+/// Capable of things like neighborhood calculation, cordinate addition, interpolation, etc...
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deref, DerefMut)]
 pub struct Cord<T, const DIM: usize>(pub [T; DIM]);
 
@@ -69,6 +73,8 @@ where
     }
 }
 
+/// Iterator over the moore neighborhood centered at some cord.
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 #[derive(Clone, Debug)]
 pub struct MooreNeighborhoodIterator<I, T: CordData, const DIM: usize> {
     iterator: I,
@@ -82,12 +88,12 @@ impl<I: Iterator<Item = Cord<T, DIM>>, T: CordData, const DIM: usize> Iterator
     type Item = Cord<T, DIM>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // Goes from left to right and from top to bottom generating neighbor cords.
-        // Each radius increases number of cells in each dimension by 2 (each extent direction by 1) starting with 1 cell at radius = 1
+        // Each radius increases number of cells in each dimension by 2 (each extent direction by 1) starting with 1 cell at radius = 1.
         while let Some(cord_offset) = self.iterator.next() {
-            let new_cord = Cord(self.cord.0.map(|x| {
+            let smallest_neighbor = Cord(self.cord.0.map(|x| {
                 x - cast(self.radius).expect("Can't cast the radius to cord's datatype.")
-            })) + cord_offset;
+            }));
+            let new_cord = smallest_neighbor + cord_offset;
 
             // Don't add self to neighbor list.
             if new_cord == self.cord {
@@ -184,89 +190,6 @@ where
     let x = offset - width * y;
     Cord([x, y])
 } */
-
-/// Determines next value of products in lexicographic order
-fn next_product_iter<T, const N: usize, I>(
-    mut current: [T; N],
-    next_val_per_idx: &mut [I; N],
-    reset_per_idx: &[I; N],
-) -> Option<[T; N]>
-where
-    I: Iterator<Item = T> + Clone,
-{
-    // Start at least significant digit first.
-    for i in (0..N).rev() {
-        // If still new values for idx get next and return.
-        if let Some(next) = next_val_per_idx[i].next() {
-            current[i] = next;
-            return Some(current);
-        }
-        // If still more to check reset it and try next
-        else if i > 0 {
-            next_val_per_idx[i] = reset_per_idx[i].clone();
-            current[i] = next_val_per_idx[i].next().expect("Already reset iterator");
-        }
-    }
-    // If no more to check and all are at max then there is no more.
-    return None;
-}
-
-/// N dimensional product in lexicographical order
-#[derive(Clone, Debug)]
-pub struct NDCartesianProduct<I, const N: usize>
-where
-    I: Iterator,
-{
-    original_iters: [I; N],
-    next_val_iters: [I; N],
-    current: [I::Item; N],
-}
-
-impl<I, const N: usize> NDCartesianProduct<I, N>
-where
-    I: Iterator + Clone,
-    I::Item: Debug,
-{
-    fn new(mut values_per_axis: [I; N]) -> Self {
-        let original_iters = values_per_axis.clone();
-        // The length of current is N and so is values per axis. This unwrap should thus never fail unless an empty iterator is used.
-        // The values_per_axis are purposefully stepped here so that the lower bound is not repeated.
-        let current = array::from_fn(|i| {
-            values_per_axis[i]
-                .next()
-                .expect("All values per axis should have at least 1 valid value.")
-        });
-
-        // Reset the least significant idx (0) so the first element is not skipped
-        match (values_per_axis.last_mut(), original_iters.last()) {
-            (Some(x), Some(y)) => *x = y.clone(),
-            _ => (),
-        }
-
-        NDCartesianProduct {
-            original_iters,
-            next_val_iters: values_per_axis,
-            current,
-        }
-    }
-}
-
-impl<I: Iterator + Clone, const N: usize> Iterator for NDCartesianProduct<I, N>
-where
-    I: Iterator + Clone,
-    I::Item: Clone,
-{
-    type Item = [I::Item; N];
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.current = next_product_iter(
-            self.current.clone(),
-            &mut self.next_val_iters,
-            &self.original_iters,
-        )?;
-        Some(self.current.clone())
-    }
-}
 
 #[cfg(test)]
 mod tests {
