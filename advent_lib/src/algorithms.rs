@@ -5,26 +5,38 @@ use std::{
     ops::Add,
 };
 
-/// Calculate the distance from start to end.
-// TODO and the path of two nodes
+/// Calculate the distance from start to end and optionally the shortest path between nodes if a path exists.
+/// # Notes
 /// - The potential function must not overestimate distance between nodes and must not be negative.
-/// - Edge weights must be positive.
 /// - A potential of `|_| 0` is equivalent to Dijkstra
+/// # Panics
+/// - Edge weights must be positive.
 pub fn astar<Node, Distance, I>(
     start: Node,
     end: Node,
     neighbors: impl Fn(Node) -> I,
     potential: impl Fn(Node) -> Distance,
     neighbor_edge_weight: impl Fn(Node, Node) -> Distance,
-) -> Option<Distance>
+    reconstruct_path: bool,
+) -> Option<(Distance, Option<Vec<Node>>>)>
 where
     Node: Eq + Hash + Copy,
     Distance: Zero + Add<Output = Distance> + Ord + Copy,
     I: Iterator<Item = Node>,
 {
-    // Dijkstra
+    fn reconstruct_path(backtrack: HashMap<Node, Option<Node>>) -> Vec<Node> {
+        todo!()
+    }
+    // Boundary nodes are the nodes at the edge to pick from to explore next.
     let mut boundary_nodes = HashSet::from([start]);
+    // Distances is a map of the shortest known distance to any node from the start.
     let mut distances = HashMap::from([(start, Distance::zero())]);
+    // Reconstructed path is the shortest path from the start to the end. Each node knows its parent and this means the path can be backtracked.
+    let backtrack = if backtrack {
+        Some(HashMap::from([(start, None)]))
+    } else {
+        None
+    };
 
     while !boundary_nodes.is_empty() {
         // Remove closest node defined by distance + potential of node.
@@ -41,9 +53,9 @@ where
             .unwrap();
         boundary_nodes.remove(&cur_node);
 
-        // If the end is reached return the distance to the end.
+        // If the end is reached return the distance to the end and the path.
         if cur_node == end {
-            return Some(distances[&end]);
+            return Some((distances[&end], backtrack.map(|x| reconstruct_path(x))));
         }
 
         // Increase scope of neighbors to neighbors of `cur_node`
@@ -64,7 +76,7 @@ where
         }
     }
 
-    // If not found after full search then no valid path/distance.
+    // If not found after full search then no valid distance/path.
     None
 }
 

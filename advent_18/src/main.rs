@@ -136,6 +136,7 @@ mod part2 {
                         non_blob_neighbors,
                         |_| 0, // 0 is faster than -> `|neighbor: Voxel| neighbor.manhattan_distance(voxel)`. I guess the heuristic is bad?
                         |_, _| 1,
+                        false,
                     )
                     .is_some()
                     {
