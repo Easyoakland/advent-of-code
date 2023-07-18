@@ -1,11 +1,8 @@
-use crate::data::Voxel;
-#[allow(unused_imports)]
 use advent_lib::{
     algorithms::astar,
-    dbc,
+    cord::Cord,
     parse::{parse_from, read_file_static},
 };
-use itertools::Itertools;
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -14,83 +11,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-mod data {
-    use advent_lib::cord::abs_diff;
-    use derive_more::{Add, Sub};
-
-    use super::*;
-
-    type Datatype = isize;
-    #[derive(Clone, Copy, Debug, Default, Add, Sub, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct Voxel(pub Datatype, pub Datatype, pub Datatype);
-    impl From<(Datatype, Datatype, Datatype)> for Voxel {
-        fn from(value: (Datatype, Datatype, Datatype)) -> Self {
-            Voxel(value.0, value.1, value.2)
-        }
-    }
-
-    impl Voxel {
-        pub fn op3<T: Into<O> + From<Datatype>, O: Into<Datatype>>(
-            self,
-            rhs: Self,
-            f: fn(T, T) -> O,
-        ) -> Self {
-            Voxel(
-                f(self.0.into(), rhs.0.into()).into(),
-                f(self.1.into(), rhs.1.into()).into(),
-                f(self.2.into(), rhs.2.into()).into(),
-            )
-        }
-
-        pub fn manhattan_distance(self, other: &Self) -> Datatype {
-            // Try one way and if it doesn't give valid value try other.
-            let temp = self.op3(*other, abs_diff::<Datatype>);
-            temp.0 + temp.1 + temp.2
-        }
-
-        /// Radius is manhattan distance from center to edge.
-        /// Moore neighborhood is a square formed by the extents of the Neumann neighborhood.
-        pub fn moore_neighborhood(
-            &self,
-            radius: isize,
-        ) -> impl Iterator<Item = Voxel> + Clone + '_ {
-            let dim_max = radius + radius + 1;
-            (0..dim_max)
-                .cartesian_product(0..dim_max)
-                .cartesian_product(0..dim_max)
-                .filter_map(move |((i, j), k)| {
-                    // Goes from left to right and from top to bottom generating neighbor cords.
-                    // Each radius increases number of cells in each dimension by 2 (each extent direction by 1) starting with 1 cell at radius = 1
-                    {
-                        let x = self.0.checked_sub(radius);
-                        let y = self.1.checked_sub(radius);
-                        let z = self.2.checked_sub(radius);
-                        let (x, y, z) = match (x, y, z) {
-                            (Some(a), Some(b), Some(c)) => (a + i, b + j, c + k),
-                            _ => panic!("datatype can't hold neighborhood"),
-                        };
-
-                        // Don't add self to neighbor list.
-                        if x == self.0 && y == self.1 && z == self.2 {
-                            return None;
-                        }
-
-                        Some(Voxel(x, y, z))
-                    }
-                })
-        }
-
-        /// Radius is manhattan distance of furthest neighbors.
-        /// Neumann neighborhood is all cells a manhattan distance of the radius or smaller.
-        pub fn neumann_neighborhood(
-            &self,
-            radius: isize,
-        ) -> impl Iterator<Item = Voxel> + Clone + '_ {
-            let neighbors = self.moore_neighborhood(radius);
-            neighbors.filter(move |x| x.manhattan_distance(&self) <= radius)
-        }
-    }
-}
+type Voxel = Cord<isize, 3>;
 
 mod parse {
     use nom::{
@@ -109,6 +30,7 @@ mod parse {
             (terminated(parse_from(digit1), tag(","))),
             parse_from(digit1),
         ))(input)?;
+        let out = [out.0, out.1, out.2];
         Ok((input, out.into()))
     }
     pub fn parse_input(input: &str) -> IResult<&str, Vec<Voxel>> {
@@ -163,16 +85,16 @@ mod part2 {
         let voxels = voxels;
 
         let (min_x, max_x) = (
-            voxels.iter().min_by(|x, y| x.0.cmp(&y.0)).unwrap().0,
-            voxels.iter().max_by(|x, y| x.0.cmp(&y.0)).unwrap().0,
+            voxels.iter().min_by(|x, y| x[0].cmp(&y[0])).unwrap()[0],
+            voxels.iter().max_by(|x, y| x[0].cmp(&y[0])).unwrap()[0],
         );
         let (min_y, max_y) = (
-            voxels.iter().min_by(|x, y| x.1.cmp(&y.1)).unwrap().1,
-            voxels.iter().max_by(|x, y| x.1.cmp(&y.1)).unwrap().1,
+            voxels.iter().min_by(|x, y| x[1].cmp(&y[1])).unwrap()[1],
+            voxels.iter().max_by(|x, y| x[1].cmp(&y[1])).unwrap()[1],
         );
         let (min_z, max_z) = (
-            voxels.iter().min_by(|x, y| x.2.cmp(&y.2)).unwrap().2,
-            voxels.iter().max_by(|x, y| x.2.cmp(&y.2)).unwrap().2,
+            voxels.iter().min_by(|x, y| x[2].cmp(&y[2])).unwrap()[2],
+            voxels.iter().max_by(|x, y| x[2].cmp(&y[2])).unwrap()[2],
         );
 
         println!("There are {} voxels", voxels.len());
@@ -186,12 +108,12 @@ mod part2 {
                 // Filter out nodes far beyond the blob leaving only the blob and immediate exposing air.
                 // For example in 1D everything within | would be a valid neighbor: A A | A X A X X A | A A
                 .filter(|node| {
-                    min_x - 1 <= node.0
-                        && node.0 <= max_x + 1
-                        && min_y - 1 <= node.1
-                        && node.1 <= max_y + 1
-                        && min_z - 1 <= node.2
-                        && node.2 <= max_z + 1
+                    min_x - 1 <= node[0]
+                        && node[0] <= max_x + 1
+                        && min_y - 1 <= node[1]
+                        && node[1] <= max_y + 1
+                        && min_z - 1 <= node[2]
+                        && node[2] <= max_z + 1
                 })
                 .collect::<Vec<_>>()
                 .into_iter()
@@ -209,7 +131,7 @@ mod part2 {
                 non_blob_neighbors(*voxel).for_each(|neighbor| {
                     // If that neighbor can be reached from outside the blob without crossing through the blob (not internal air pocket).
                     if astar::<Voxel, isize, _>(
-                        (max_x + 1, max_y + 1, max_z + 1).into(),
+                        [max_x + 1, max_y + 1, max_z + 1].into(),
                         neighbor,
                         non_blob_neighbors,
                         |_| 0, // 0 is faster than -> `|neighbor: Voxel| neighbor.manhattan_distance(voxel)`. I guess the heuristic is bad?
@@ -228,6 +150,7 @@ mod part2 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use advent_lib::dbc;
 
     #[test]
     fn test_part1_out_parse() -> Result<(), Box<dyn Error>> {
