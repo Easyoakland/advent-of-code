@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use advent_lib::dbc;
-use advent_lib::{cord::Cord, parse::read_file_static};
+use advent_lib::{cord::Cord, parse::read_and_leak};
 use data::{Action, Rock};
 use std::{
     collections::{BTreeSet, HashSet},
@@ -238,7 +238,7 @@ mod part1 {
     use crate::data::{Grid, TYPES_OF_ROCK};
 
     pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
-        let input = read_file_static(file_name)?;
+        let input = read_and_leak(file_name)?;
         let actions = parse::parse_input(input);
         let mut actions = actions.into_iter().cycle();
         let mut grid = Grid {
@@ -338,7 +338,7 @@ mod part2 {
     const TARGET_RND_NUM: usize = 1000000000000;
 
     pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
-        let input = read_file_static(file_name)?;
+        let input = read_and_leak(file_name)?;
         let actions = parse::parse_input(input);
         let action_len = actions.len();
         let mut actions = actions.into_iter().cycle();
@@ -493,7 +493,7 @@ mod tests {
 
     #[test]
     fn test_part1_out_parse() -> Result<(), Box<dyn Error>> {
-        let input = read_file_static("inputtest.txt")?;
+        let input = read_and_leak("inputtest.txt")?;
         let actions = parse::parse_input(input);
         dbc!(actions);
         Ok(())

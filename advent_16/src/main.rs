@@ -1,5 +1,5 @@
 #[allow(unused_imports)]
-use advent_lib::{algorithms, dbc, parse::read_file_static};
+use advent_lib::{algorithms, dbc, parse::read_and_leak};
 use cached::proc_macro::cached;
 use std::{
     collections::{hash_map::DefaultHasher, BTreeMap},
@@ -116,7 +116,7 @@ mod part1 {
 
     const MAX_MINUTES: u32 = 30;
     pub fn run(file: &str) -> Result<u32, Box<dyn Error>> {
-        let input = read_file_static(file)?;
+        let input = read_and_leak(file)?;
         let (flowrates, mut distances) = parse::parse_input(input);
         algorithms::floyd_warshall(flowrates.keys().copied(), &mut distances); // calc distances
 
@@ -147,7 +147,7 @@ mod part2 {
 
     const MAX_MINUTES: u32 = 26;
     pub fn run(file: &str) -> Result<u32, Box<dyn Error>> {
-        let input = read_file_static(file)?;
+        let input = read_and_leak(file)?;
         let (flowrates, mut distances) = parse::parse_input(input);
         algorithms::floyd_warshall(flowrates.keys().copied(), &mut distances); // calc distances
 
@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn test_part1_out_parse() -> Result<(), Box<dyn Error>> {
-        let input = read_file_static("inputtest.txt")?;
+        let input = read_and_leak("inputtest.txt")?;
         let (flowrates, distances) = parse::parse_input(input);
         dbc!(flowrates, distances);
         Ok(())

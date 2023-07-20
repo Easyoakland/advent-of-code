@@ -1,7 +1,7 @@
 use advent_lib::{
     algorithms::astar,
     cord::Cord,
-    parse::{parse_from, read_file_static},
+    parse::{parse_from, read_and_leak},
 };
 use std::error::Error;
 
@@ -43,13 +43,10 @@ mod part1 {
     use crate::parse::parse_input;
 
     pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
-        let input = read_file_static(file_name)?;
+        let input = read_and_leak(file_name)?;
         let (_, mut voxels) = parse_input(input)?;
-        let mut voxel_exposed = vec![0usize; voxels.len()];
         // Sort so faster to find voxels later.
         voxels.sort();
-        // Don't mutate further.
-        let voxels = voxels;
         let non_blob_neighbors = |voxel: Voxel| {
             voxel
                 .neumann_neighborhood(1)
@@ -57,15 +54,10 @@ mod part1 {
                 .collect::<Vec<_>>()
                 .into_iter()
         };
-        // For every voxel.
-        for (i, voxel) in voxels.iter().enumerate() {
-            // It is exposed on 6 - the number of neighboring voxels that are in the blob faces.
-            for _neighbor in non_blob_neighbors(*voxel) {
-                // If that neighbor actually exists in the blob.
-                voxel_exposed[i] += 1;
-            }
-        }
-        Ok(voxel_exposed.iter().sum())
+        Ok(voxels
+            .iter()
+            .map(|&voxel| non_blob_neighbors(voxel).count())
+            .sum())
     }
 }
 
@@ -76,7 +68,7 @@ mod part2 {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
-        let input = read_file_static(file_name)?;
+        let input = read_and_leak(file_name)?;
         let (_, mut voxels) = parse_input(input)?;
         let voxel_exposed = ((0..voxels.len()).map(|_| AtomicUsize::new(0))).collect::<Vec<_>>();
         // Sort so faster to find voxels later.
@@ -122,7 +114,7 @@ mod part2 {
         voxels
             .iter()
             .enumerate()
-            .par_bridge() // This takes a long time (2048 astar searches (1 per voxel) * ~19^3 voxels = ~14 mil distance checks). The parallelism helps somewhat.
+            .par_bridge() // This takes a long time (2048 astar searches (1 per voxel) * ~19^3 voxels in bounding box = ~14 mil distance checks). The parallelism helps somewhat.
             .for_each(|(i, voxel)| {
                 if i % 100 == 0 {
                     println!("Checked first {i} voxels");
@@ -130,7 +122,7 @@ mod part2 {
                 // For each non-blob face/neighbor.
                 non_blob_neighbors(*voxel).for_each(|neighbor| {
                     // If that neighbor can be reached from outside the blob without crossing through the blob (not internal air pocket).
-                    if astar::<Voxel, isize, _>(
+                    if astar(
                         [max_x + 1, max_y + 1, max_z + 1].into(),
                         neighbor,
                         non_blob_neighbors,
@@ -155,7 +147,7 @@ mod tests {
 
     #[test]
     fn test_part1_out_parse() -> Result<(), Box<dyn Error>> {
-        let input = read_file_static("inputtest.txt")?;
+        let input = read_and_leak("inputtest.txt")?;
         let (_, parsed) = parse::parse_input(input).unwrap();
         dbc!(parsed);
         Ok(())
