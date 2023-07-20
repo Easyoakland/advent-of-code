@@ -6,6 +6,7 @@ use std::{
     array,
     fmt::Debug,
     iter::Sum,
+    num::NonZeroUsize,
     ops::{Add, AddAssign, Sub, SubAssign},
 };
 
@@ -168,6 +169,39 @@ where
         });
         NDCartesianProduct::new(ranges).map(Cord)
     }
+
+    /// Find the cordinate that coresponds to a given offset where maximum width of each axis is given.
+    /// Fills values of coordinates from greatest index to least.
+    /// ```
+    /// # use advent_lib::cord::Cord;
+    /// # use core::num::NonZeroUsize;
+    /// // x x
+    /// // x x
+    /// // x x
+    /// let widths = [2, 3].map(|x| NonZeroUsize::new(x).unwrap());
+    /// assert_eq!(Cord::from_offset(0, widths), Cord([0, 0]));
+    /// assert_eq!(Cord::from_offset(1, widths), Cord([1, 0]));
+    /// assert_eq!(Cord::from_offset(2, widths), Cord([0, 1]));
+    /// assert_eq!(Cord::from_offset(3, widths), Cord([1, 1]));
+    /// assert_eq!(Cord::from_offset(4, widths), Cord([0, 2]));
+    /// ```
+    pub fn from_offset(mut offset: usize, widths: [NonZeroUsize; DIM]) -> Cord<T, DIM>
+    where
+        T: From<usize>,
+    {
+        let mut out = [0; DIM];
+        for axis in (0..DIM).rev() {
+            let next_lowest_axis_width = axis.checked_sub(1);
+            out[axis] = match next_lowest_axis_width {
+                Some(x) => offset / widths[x],
+                None => offset,
+            };
+            if next_lowest_axis_width.is_some() {
+                offset -= out[axis] * usize::from(widths[axis - 1]);
+            }
+        }
+        out.map(Into::into).into()
+    }
 }
 
 impl<T: CordData, const DIM: usize> From<[T; DIM]> for Cord<T, DIM> {
@@ -181,15 +215,6 @@ impl<T, const DIM: usize> From<Cord<T, DIM>> for [T; DIM] {
         value.0
     }
 }
-
-/* pub fn offset_to_cord<T, const DIM: usize>(offset: T, width: T) -> Cord<T, DIM>
-where
-    T: std::ops::Div<Output = T> + std::ops::Mul<Output = T> + std::ops::Sub<Output = T> + Copy,
-{
-    let y = offset / width;
-    let x = offset - width * y;
-    Cord([x, y])
-} */
 
 #[cfg(test)]
 mod tests {
@@ -327,5 +352,36 @@ mod tests {
                 Cord([498, 7])
             ]
         );
+    }
+
+    #[test]
+    fn offset_to_cord_test() {
+        {
+            // x x
+            // x x
+            // x x
+            let widths = [2, 3].map(|x| NonZeroUsize::new(x).unwrap());
+            assert_eq!(Cord::from_offset(0, widths), Cord([0, 0]));
+            assert_eq!(Cord::from_offset(1, widths), Cord([1, 0]));
+            assert_eq!(Cord::from_offset(2, widths), Cord([0, 1]));
+            assert_eq!(Cord::from_offset(3, widths), Cord([1, 1]));
+            assert_eq!(Cord::from_offset(4, widths), Cord([0, 2]));
+        }
+        {
+            // z = 0
+            // x
+            // x
+            // z = 1
+            //  x
+            //  x
+            // z = 2
+            //   x
+            //   x
+            let widths = [1, 2, 3].map(|x| NonZeroUsize::new(x).unwrap());
+            assert_eq!(Cord::from_offset(0, widths), Cord([0, 0, 0]));
+            assert_eq!(Cord::from_offset(1, widths), Cord([0, 1, 0]));
+            assert_eq!(Cord::from_offset(2, widths), Cord([0, 0, 1]));
+            assert_eq!(Cord::from_offset(3, widths), Cord([0, 1, 1]));
+        }
     }
 }
