@@ -1,10 +1,12 @@
 use num_traits::{bounds::UpperBounded, SaturatingAdd, Zero};
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     hash::Hash,
     ops::Add,
 };
 
+/// [Astar](https://en.wikipedia.org/wiki/A*_search_algorithm)
+///
 /// Calculate the distance from start to end and optionally the shortest path between nodes if a path exists.
 /// # Notes
 /// - The potential function must not overestimate distance between nodes and must not be negative.
@@ -34,6 +36,7 @@ where
     } else {
         None
     };
+    // Function to convert backtrack into a vector from start to end.
     let reconstruct_path = |backtrack: HashMap<Node, Option<Node>>| -> Vec<Node> {
         let mut current = end;
         let mut out = Vec::new();
@@ -92,8 +95,9 @@ where
     None
 }
 
-/// Calculate the distance between all nodes to all other nodes.
 /// [Floyd-Warshall](https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm).
+///
+/// Calculate the distance between all nodes to all other nodes.
 /// Assumes that all nodes are connected through some sequence of edges.
 pub fn floyd_warshall<Node, Distance, I>(keys: I, distances: &mut BTreeMap<(Node, Node), Distance>)
 where
@@ -114,6 +118,26 @@ where
             }
         }
     }
+}
+
+/// [Flood Fill](https://en.wikipedia.org/wiki/Flood_fill)
+///
+/// Find the set of all connected nodes to the starting node through neighbors. The neighbors function should handle only returning items to keep in this set.
+pub fn flood_fill<Node, I>(start: Node, neighbors: impl Fn(Node) -> I) -> BTreeSet<Node>
+where
+    Node: Ord + Copy,
+    I: Iterator<Item = Node>,
+{
+    let mut stack = vec![start];
+    let mut out = BTreeSet::from([start]);
+    while let Some(node) = stack.pop() {
+        for neighbor in neighbors(node) {
+            if out.insert(neighbor) {
+                stack.push(neighbor);
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -150,5 +174,31 @@ mod test {
             astar(1, 4, neighbors, |_| 0, |_, _| 1, true),
             Some((2, Some(vec![1, 3, 4])))
         )
+    }
+
+    #[test]
+    fn flood_fill_test() {
+        // let nodes = 1 -> 2 -> 3 -> 4
+        let neighbors = |x| {
+            if x < 4 {
+                vec![x + 1].into_iter()
+            } else {
+                vec![].into_iter()
+            }
+        };
+        assert_eq!(flood_fill(1, neighbors), BTreeSet::from([1, 2, 3, 4]));
+
+        // let nodes = 1 -> 2 -> 3 -> 4 -> 1
+        //               -> 3
+        let neighbors = |x| {
+            if x == 1 {
+                vec![2, 3].into_iter()
+            } else if x < 4 {
+                vec![x + 1].into_iter()
+            } else {
+                vec![1].into_iter()
+            }
+        };
+        assert_eq!(flood_fill(1, neighbors), BTreeSet::from([1, 2, 3, 4]))
     }
 }

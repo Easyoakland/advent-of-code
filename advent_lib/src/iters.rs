@@ -23,7 +23,7 @@ where
         }
     }
     // If no more to check and all are at max then there is no more.
-    return None;
+    None
 }
 
 /// Cartesian product in lexicographical order over N iterators.
@@ -53,9 +53,8 @@ where
         });
 
         // Reset the least significant idx (0) so the first element is not skipped
-        match (values_per_axis.last_mut(), original_iters.last()) {
-            (Some(x), Some(y)) => *x = y.clone(),
-            _ => (),
+        if let (Some(x), Some(y)) = (values_per_axis.last_mut(), original_iters.last()) {
+            *x = y.clone();
         }
 
         NDCartesianProduct {

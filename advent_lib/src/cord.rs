@@ -155,7 +155,7 @@ where
     pub fn neumann_neighborhood(&self, radius: usize) -> impl Iterator<Item = Cord<T, DIM>> + '_ {
         let neighbors = self.moore_neighborhood(radius);
         neighbors.filter(move |&x| {
-            x.manhattan_distance(&self)
+            x.manhattan_distance(self)
                 <= cast(radius).expect("Can't convert radius to cord's datatype.")
         })
     }

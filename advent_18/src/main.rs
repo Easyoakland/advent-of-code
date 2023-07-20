@@ -1,5 +1,4 @@
 use advent_lib::{
-    algorithms::astar,
     cord::Cord,
     parse::{parse_from, read_and_leak},
 };
@@ -64,17 +63,14 @@ mod part1 {
 mod part2 {
     use super::*;
     use crate::parse::parse_input;
-    use rayon::prelude::{ParallelBridge, ParallelIterator};
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use advent_lib::algorithms::flood_fill;
 
     pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
         let input = read_and_leak(file_name)?;
         let (_, mut voxels) = parse_input(input)?;
-        let voxel_exposed = ((0..voxels.len()).map(|_| AtomicUsize::new(0))).collect::<Vec<_>>();
+        let mut voxel_exposed = ((0..voxels.len()).map(|_| 0)).collect::<Vec<_>>();
         // Sort so faster to find voxels later.
         voxels.sort();
-        // Don't mutate further.
-        let voxels = voxels;
 
         let (min_x, max_x) = (
             voxels.iter().min_by(|x, y| x[0].cmp(&y[0])).unwrap()[0],
@@ -89,9 +85,7 @@ mod part2 {
             voxels.iter().max_by(|x, y| x[2].cmp(&y[2])).unwrap()[2],
         );
 
-        println!("There are {} voxels", voxels.len());
-        // TODO make correct
-        // Don't weight neighbors
+        // Function to find the neighbors of a given voxel that aren't part of the lava blob.
         let non_blob_neighbors = |voxel: Voxel| {
             voxel
                 .neumann_neighborhood(1)
@@ -110,33 +104,20 @@ mod part2 {
                 .collect::<Vec<_>>()
                 .into_iter()
         };
-        // For every voxel.
-        voxels
-            .iter()
-            .enumerate()
-            .par_bridge() // This takes a long time (2048 astar searches (1 per voxel) * ~19^3 voxels in bounding box = ~14 mil distance checks). The parallelism helps somewhat.
-            .for_each(|(i, voxel)| {
-                if i % 100 == 0 {
-                    println!("Checked first {i} voxels");
+        // Starting outside the blob's bounds.
+        let start = [max_x + 1, max_y + 1, max_z + 1].into();
+        // Find all air connected to the outside.
+        let external_air = flood_fill(start, non_blob_neighbors);
+
+        // Count the faces/neighbors each voxel has that touch external air.
+        voxels.iter().enumerate().for_each(|(i, &voxel)| {
+            non_blob_neighbors(voxel).for_each(|neighbor| {
+                if external_air.contains(&neighbor) {
+                    voxel_exposed[i] += 1;
                 }
-                // For each non-blob face/neighbor.
-                non_blob_neighbors(*voxel).for_each(|neighbor| {
-                    // If that neighbor can be reached from outside the blob without crossing through the blob (not internal air pocket).
-                    if astar(
-                        [max_x + 1, max_y + 1, max_z + 1].into(),
-                        neighbor,
-                        non_blob_neighbors,
-                        |_| 0, // 0 is faster than -> `|neighbor: Voxel| neighbor.manhattan_distance(voxel)`. I guess the heuristic is bad?
-                        |_, _| 1,
-                        false,
-                    )
-                    .is_some()
-                    {
-                        voxel_exposed[i].fetch_add(1, Ordering::Relaxed);
-                    }
-                })
-            });
-        Ok(voxel_exposed.into_iter().map(|x| x.into_inner()).sum())
+            })
+        });
+        Ok(voxel_exposed.into_iter().sum())
     }
 }
 
