@@ -87,11 +87,11 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn part1_ans() -> Result<(), Box<dyn Error>> {
-    //     assert_eq!(part1::run("input.txt")?, 1466);
-    //     Ok(())
-    // }
+    #[test]
+    fn part1_ans() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part1::run("input.txt")?, 11123);
+        Ok(())
+    }
 
     // #[test]
     // fn test_part2() -> Result<(), Box<dyn Error>> {
