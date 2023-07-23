@@ -7,7 +7,7 @@ mod parse;
 mod part1 {
     use super::*;
     use crate::{
-        data::{Robot, Round},
+        data::{max_geodes, Robot, Round},
         parse::parse_input,
     };
     use std::collections::BTreeMap;
@@ -20,12 +20,17 @@ mod part1 {
             robots: BTreeMap::from([(Robot::Ore, 1)]),
             ..Default::default()
         });
-        Ok(starting_rounds
-            .into_iter()
-            .map(|round| round.max_geodes(10))
-            .enumerate()
-            .map(|(i, quality_level)| i * usize::from(quality_level))
-            .sum())
+        Ok({
+            let ret = starting_rounds
+                .into_iter()
+                .map(|round| max_geodes(round, 24))
+                .enumerate()
+                .map(|(i, quality_level)| i * usize::from(quality_level.unwrap_or_default()))
+                .sum();
+
+            unsafe { dbg!(data::CNT) };
+            ret
+        })
     }
 }
 
@@ -33,4 +38,36 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Part 1 answer: {:#?}", part1::run("input.txt")?);
     // println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use advent_lib::dbc;
+
+    #[test]
+    fn test_part1() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part1::run("inputtest.txt")?, 33);
+        Ok(())
+    }
+
+    #[test]
+    fn part1_ans() -> Result<(), Box<dyn Error>> {
+        assert!(dbc!(part1::run("input.txt")?) < 12306);
+        assert!(part1::run("input.txt")? < 3548);
+        assert_eq!(part1::run("input.txt")?, 3542);
+        Ok(())
+    }
+
+    // #[test]
+    // fn test_part2() -> Result<(), Box<dyn Error>> {
+    //     assert_eq!(part2::run("inputtest.txt")?, 58);
+    //     Ok(())
+    // }
+
+    // #[test]
+    // fn part2_ans() -> Result<(), Box<dyn Error>> {
+    //     assert_eq!(part2::run("input.txt")?, 2080);
+    //     Ok(())
+    // }
 }
