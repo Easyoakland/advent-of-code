@@ -10,22 +10,41 @@ mod part1 {
         data::{max_geodes, Robot, Round},
         parse::parse_input,
     };
-    use std::collections::BTreeMap;
+    use std::{cell::Cell, collections::BTreeMap, rc::Rc};
 
     pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
         let input = read_and_leak(file_name)?;
         let blueprints = parse_input(input)?;
-        let starting_rounds = blueprints.into_iter().map(|blueprint| Round {
-            blueprint,
-            robots: BTreeMap::from([(Robot::Ore, 1)]),
-            ..Default::default()
+        let starting_rounds = blueprints.into_iter().map(|blueprint| {
+            [
+                Round {
+                    blueprint: blueprint.clone(),
+                    robots: BTreeMap::from([(Robot::Ore, 1)]),
+                    target: Robot::Ore,
+                    ..Default::default()
+                },
+                Round {
+                    blueprint,
+                    robots: BTreeMap::from([(Robot::Ore, 1)]),
+                    target: Robot::Clay,
+                    ..Default::default()
+                },
+            ]
         });
         Ok({
             let ret = starting_rounds
                 .into_iter()
-                .map(|round| max_geodes(round, 24))
-                .enumerate()
-                .map(|(i, quality_level)| i * usize::from(quality_level.unwrap_or_default()))
+                .map(|round| {
+                    (
+                        round[0].blueprint.id,
+                        max_geodes(round[0].clone(), 24, Rc::new(Cell::new(0))),
+                    )
+                        .max((
+                            round[1].blueprint.id,
+                            max_geodes(round[1].clone(), 24, Rc::new(Cell::new(0))),
+                        ))
+                })
+                .map(|(id, quality_level)| id * usize::from(quality_level.unwrap()))
                 .sum();
 
             unsafe { dbg!(data::CNT) };

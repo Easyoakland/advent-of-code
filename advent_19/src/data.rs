@@ -1,7 +1,12 @@
 use core::fmt::Debug;
 use derive_more::{Add, AddAssign, Mul, Sub, SubAssign};
 use enum_iterator::Sequence;
-use std::{collections::BTreeMap, sync::atomic::AtomicU16};
+use std::{
+    cell::Cell,
+    collections::{hash_map::DefaultHasher, BTreeMap},
+    hash::{Hash, Hasher},
+    rc::Rc,
+};
 
 #[derive(Clone, Copy, Debug, Default, Add, AddAssign, Sub, SubAssign, Mul, PartialEq, Eq, Hash)]
 pub struct Resource {
@@ -225,8 +230,6 @@ impl Round {
     }
 }
 
-static BEST: AtomicU16 = AtomicU16::new(0);
-
 /// Assume that a geode bot is created every round. That's the best value this state could ever have.
 pub fn best_case_geodes(round: &Round, last_minute: u8) -> u16 {
     let mut current_min = round.minute;
@@ -246,35 +249,42 @@ pub fn best_case_geodes(round: &Round, last_minute: u8) -> u16 {
 }
 
 /// Maximum possible geodes with a given blueprint given the current round state.
-#[cached::proc_macro::cached]
-pub fn max_geodes(round: Round, last_minute: u8) -> Option<u16> {
+#[cached::proc_macro::cached(
+    key = "String",
+    convert = r#"{ format!("{}{}", last_minute,  {
+        let mut hasher = DefaultHasher::default();
+        round.hash(&mut hasher);
+        hasher.finish()
+    }) }"#
+)]
+pub fn max_geodes(round: Round, last_minute: u8, best: Rc<Cell<u16>>) -> Option<u16> {
     unsafe { CNT += 1 };
-    if LOG {
-        let indent = (0..round.minute).map(|_| " ").collect::<String>();
-        println!(
-            "{}Min: {}, Target: {:?}, Robots: {:?}, {:?}, {:?}",
-            indent, round.minute, round.target, round.robots, round.resources, round.blueprint
-        );
-    }
     if round.minute >= last_minute {
         return Some(round.resources.geode.into());
     }
 
-    let best = BEST.load(std::sync::atomic::Ordering::Relaxed);
-    if best_case_geodes(&round, last_minute) < best {
+    if best_case_geodes(&round, last_minute) < best.get() {
         return None;
     } else {
         let branches = round.do_round();
         let res = branches
             .into_iter()
-            .flat_map(|branch| max_geodes(branch, last_minute))
-            .max();
-        if let Some(x) = res {
-            BEST.store(
-                BEST.load(std::sync::atomic::Ordering::Acquire).max(x),
-                std::sync::atomic::Ordering::Release,
+            .flat_map(|branch| max_geodes(branch, last_minute, best.clone()))
+            .max()?;
+        if LOG && res > 0 {
+            let indent = (0..round.minute).map(|_| " ").collect::<String>();
+            println!(
+                "{}Expect: {}, Min: {}, Target: {:?}, Robots: {:?}, {:?}, {:?}",
+                indent,
+                res,
+                round.minute,
+                round.target,
+                round.robots,
+                round.resources,
+                round.blueprint
             );
         }
-        res
+        best.set(best.get().max(res));
+        Some(res)
     }
 }
