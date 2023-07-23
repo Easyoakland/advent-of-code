@@ -62,7 +62,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use advent_lib::dbc;
 
     #[test]
     fn test_part1() -> Result<(), Box<dyn Error>> {
@@ -72,9 +71,7 @@ mod tests {
 
     #[test]
     fn part1_ans() -> Result<(), Box<dyn Error>> {
-        assert!(dbc!(part1::run("input.txt")?) < 12306);
-        assert!(part1::run("input.txt")? < 3548);
-        assert_eq!(part1::run("input.txt")?, 3542);
+        assert_eq!(part1::run("input.txt")?, 1466);
         Ok(())
     }
 
