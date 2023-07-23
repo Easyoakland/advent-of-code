@@ -56,27 +56,6 @@ impl From<Robot> for Resource {
     }
 }
 
-impl Resource {
-    /// Takes the amount of the type of resource this robot could generate.
-    pub fn subresource(&self, robot: &Robot) -> u8 {
-        match robot {
-            Robot::Ore => self.ore,
-            Robot::Clay => self.clay,
-            Robot::Obsidian => self.obsidian,
-            Robot::Geode => self.geode,
-        }
-    }
-
-    pub fn pairwise_max(&self, other: &Self) -> Self {
-        Resource {
-            ore: self.ore.max(other.ore),
-            clay: self.clay.max(other.clay),
-            obsidian: self.obsidian.max(other.obsidian),
-            geode: self.geode.max(other.geode),
-        }
-    }
-}
-
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
 pub struct Blueprint {
     pub id: usize,
@@ -94,29 +73,6 @@ impl Blueprint {
             Robot::Obsidian => self.obsidian_robot_cost,
             Robot::Geode => self.geode_robot_cost,
         }
-    }
-
-    pub fn affordable_robots(&self, available_resources: Resource) -> Vec<Robot> {
-        let res: Vec<Robot> = enum_iterator::all()
-            .filter(|x| self.construct_cost(x) <= available_resources)
-            .collect();
-        res
-    }
-
-    /// Returns the highest value of resource that will ever be needed.
-    pub fn most_expensive_for_resource(&self, resource: Robot) -> u8 {
-        enum_iterator::all()
-            .map(|robot| self.construct_cost(&robot).subresource(&resource))
-            .max()
-            .expect("Not Empty")
-    }
-
-    /// The minimal amount of resources needed to construct any robot
-    pub fn max_resources_needed(&self) -> Resource {
-        self.ore_robot_cost
-            .pairwise_max(&self.clay_robot_cost)
-            .pairwise_max(&self.obsidian_robot_cost)
-            .pairwise_max(&self.geode_robot_cost)
     }
 }
 
@@ -200,33 +156,6 @@ impl Round {
         } else {
             vec![new_rnd]
         }
-    }
-
-    pub fn constructable(&self) -> Vec<Option<Robot>> {
-        std::iter::once(None)
-            .chain(
-                self.blueprint
-                    .affordable_robots(self.resources)
-                    .into_iter()
-                    .map(Option::Some),
-            )
-            .collect()
-    }
-
-    pub fn pruned_constructable(&self) -> Vec<Option<Robot>> {
-        let constructable = self.constructable();
-        // If you can build everything you must build something.
-        if enum_iterator::all::<Robot>()
-            .map(|robot| self.blueprint.construct_cost(&robot))
-            .filter(|x| x < &self.resources)
-            .count()
-            == enum_iterator::cardinality::<Robot>()
-        {
-            return constructable.into_iter().filter(|x| x.is_some()).collect();
-        }
-
-        // If you have enough of some subresources for any robot that requires them then you should build robot that requires only those instead of nothing.
-        constructable
     }
 }
 
