@@ -1,6 +1,6 @@
 use advent_lib::{
     cord::Cord,
-    parse::{parse_from, read_and_leak},
+    parse::{nom::parse_from, read_and_leak},
 };
 use std::error::Error;
 

@@ -112,6 +112,14 @@ name = "advent_2"
 version = "0.1.0"
 
 [[package]]
+name = "advent_20"
+version = "0.1.0"
+dependencies = [
+ "advent_lib",
+ "yap",
+]
+
+[[package]]
 name = "advent_3"
 version = "0.1.0"
 
@@ -163,6 +171,8 @@ dependencies = [
  "nom",
  "num-iter",
  "num-traits",
+ "thiserror",
+ "yap",
 ]
 
 [[package]]

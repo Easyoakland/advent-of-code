@@ -12,6 +12,3 @@ derive_more = "0.99.17"
 enum-iterator = "1.4.1"
 thiserror = "1.0.44"
 yap = "0.11.0"
-
-[profile.release]
-overflow-checks = true
