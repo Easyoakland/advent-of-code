@@ -1,26 +1,9 @@
 use std::error::Error;
 
 mod parse {
-    use advent_lib::parse::yap::{all_consuming, line_ending, ParseError};
-    use std::str::FromStr;
+    use advent_lib::parse::yap::{all_consuming, line_ending, signed_digit1, ParseError};
     use yap::{IntoTokens, Tokens};
     type Cord = isize;
-
-    pub fn signed_digit1<I, O>(input: &mut I) -> Option<Result<O, <O as FromStr>::Err>>
-    where
-        I: Tokens<Item = char>,
-        O: FromStr + std::fmt::Debug,
-        <O as FromStr>::Err: std::fmt::Debug,
-    {
-        let to_parse = input
-            .tokens_while(|&t| t.is_numeric() || t == '+' || t == '-')
-            .collect::<String>();
-        if to_parse.is_empty() {
-            None
-        } else {
-            Some(to_parse.parse::<O>())
-        }
-    }
 
     pub fn parse_input(input: &str) -> Result<Vec<Cord>, ParseError<char>> {
         all_consuming(&mut input.into_tokens(), |t| {

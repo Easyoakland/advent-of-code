@@ -106,18 +106,42 @@ pub mod yap {
         }
     }
 
+    pub fn parse_from<I, O, F>(
+        input: &mut I,
+        take_while: F,
+    ) -> Option<Result<O, <O as FromStr>::Err>>
+    where
+        I: Tokens<Item = char>,
+        O: FromStr,
+        F: FnMut(&I::Item) -> bool,
+    {
+        let to_parse = input.tokens_while(take_while).collect::<String>();
+        if to_parse.is_empty() {
+            None
+        } else {
+            Some(to_parse.parse::<O>())
+        }
+    }
+
     // Parses at least 1 digit.
     pub fn digit1<I, O>(input: &mut I) -> Option<Result<O, <O as FromStr>::Err>>
     where
         I: Tokens<Item = char>,
         O: FromStr,
     {
-        let to_parse = input.tokens_while(|t| t.is_numeric()).collect::<String>();
-        if to_parse.is_empty() {
-            None
-        } else {
-            Some(to_parse.parse::<O>())
-        }
+        let take_while = |t: &char| t.is_numeric();
+        parse_from(input, take_while)
+    }
+
+    // Parses at least 1 digit with an optional sign (+/-) in front.
+    pub fn signed_digit1<I, O>(input: &mut I) -> Option<Result<O, <O as FromStr>::Err>>
+    where
+        I: Tokens<Item = char>,
+        O: FromStr + std::fmt::Debug,
+        <O as FromStr>::Err: std::fmt::Debug,
+    {
+        let take_while = |&t: &char| t.is_numeric() || t == '+' || t == '-';
+        parse_from(input, take_while)
     }
 
     /// Parses a line ending of either "\n" (like on linux)  or "\r\n" (like on windows)
