@@ -51,6 +51,13 @@ mod data {
         pub fn div<'b>(&'b self, rhs: &'b Self, backing: &'b MonkeyBacking<'a>) -> Val {
             monkey_op(self, rhs, Val::div, backing)
         }
+
+        pub fn eval(&self, backing: &MonkeyBacking<'a>) -> Val {
+            match self {
+                Monkey::Const(x) => *x,
+                Monkey::Op((op, a, b)) => op(&backing[a], &backing[b], &backing),
+            }
+        }
     }
 }
 
@@ -90,7 +97,7 @@ mod parse {
         input: &'a str,
         all_monkeys: &mut BTreeMap<MonkeyId<'a>, Monkey<'a>>,
     ) -> IResult<&'a str, ()> {
-        let (input, id) = alpha1(input)?;
+        let (input, id) = terminated(alpha1, tag(": "))(input)?;
         let (input, op): (&str, Op) = alt((
             digit1.map(|x: &str| Op::Const(x.parse::<Val>().unwrap())),
             monkey_op.map(|x| Op::Op((x.1, x.0, x.2))),
@@ -106,7 +113,7 @@ mod parse {
         let mut all_monkeys = BTreeMap::new();
         let (out, _) = all_consuming(terminated(
             separated_list1(line_ending, |i| monkey(i, &mut all_monkeys)),
-            eof,
+            tuple((line_ending, eof)),
         ))(input)?;
         Ok((out, all_monkeys))
     }
@@ -114,14 +121,13 @@ mod parse {
 
 mod part1 {
     use super::*;
-    use crate::parse::parse_input;
+    use crate::{data::Val, parse::parse_input};
     use advent_lib::parse::read_and_leak;
 
-    pub fn run(file_name: &str) -> Result<isize, Box<dyn Error>> {
+    pub fn run(file_name: &str) -> Result<Val, Box<dyn Error>> {
         let input = read_and_leak(file_name)?;
-        let (_, cords) = parse_input(input)?;
-        dbg!(cords);
-        Ok(todo!())
+        let (_, monkeys) = parse_input(input)?;
+        Ok(monkeys["root"].eval(&monkeys))
     }
 }
 
@@ -141,11 +147,11 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn part1_ans() -> Result<(), Box<dyn Error>> {
-    //     assert_eq!(part1::run("input.txt")?, 11123);
-    //     Ok(())
-    // }
+    #[test]
+    fn part1_ans() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part1::run("input.txt")?, 31017034894002);
+        Ok(())
+    }
 
     // #[test]
     // fn test_part2() -> Result<(), Box<dyn Error>> {
