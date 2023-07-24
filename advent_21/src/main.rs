@@ -5,7 +5,7 @@ mod data {
     use super::*;
     use std::collections::BTreeMap;
 
-    pub type Val = usize;
+    pub type Val = f64;
     pub type MonkeyId<'a> = &'a str;
     pub type MonkeyOp<'b> =
         for<'a> fn(&'a Monkey<'b>, &'a Monkey<'b>, &'a MonkeyBacking<'b>) -> Val;
@@ -32,7 +32,7 @@ mod data {
         }
     }
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug, PartialEq)]
     pub enum Monkey<'a> {
         Const(Val),
         Op((MonkeyOp<'a>, MonkeyId<'a>, MonkeyId<'a>)),
@@ -131,9 +131,48 @@ mod part1 {
     }
 }
 
+mod part2 {
+    use super::*;
+    use crate::{
+        data::{Monkey, Val},
+        parse::parse_input,
+    };
+    use advent_lib::parse::read_and_leak;
+
+    pub fn run(file_name: &str) -> Result<Val, Box<dyn Error>> {
+        let input = read_and_leak(file_name)?;
+        let (_, mut monkeys) = parse_input(input)?;
+        let Monkey::Op((_, left, right)) = monkeys["root"] else { panic!("Root has 2 children") };
+        let target = dbg!(monkeys[right].eval(&monkeys));
+        // Brute force check using newton's method
+        let mut x = 0.;
+        // Formulate a function which is zero when the target is reached.
+        let mut f = |xn| {
+            *monkeys.get_mut("humn").expect("humn exists") = Monkey::Const(xn);
+            let end = monkeys[left].eval(&monkeys);
+            end - target
+        };
+        // Netwon's method using f(x+1) - f(x) to approximate the derivative.
+        loop {
+            let res = f(x);
+            if res.abs() <= Val::EPSILON {
+                break;
+            }
+            let derivative = f(x + 1.) - res;
+            if derivative == 0. {
+                // Avoid crash by nudging x instead.
+                x += 1.;
+            } else {
+                x = x - res / derivative;
+            }
+        }
+        Ok(monkeys["humn"].eval(&monkeys))
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Part 1 answer: {:#?}", part1::run("input.txt")?);
-    // println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
+    println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
     Ok(())
 }
 
@@ -143,25 +182,26 @@ mod tests {
 
     #[test]
     fn test_part1() -> Result<(), Box<dyn Error>> {
-        assert_eq!(part1::run("inputtest.txt")?, 152);
+        assert_eq!((part1::run("inputtest.txt")? as u64), 152);
         Ok(())
     }
 
     #[test]
     fn part1_ans() -> Result<(), Box<dyn Error>> {
-        assert_eq!(part1::run("input.txt")?, 31017034894002);
+        assert_eq!((part1::run("input.txt")? as u64), 31017034894002);
         Ok(())
     }
 
-    // #[test]
-    // fn test_part2() -> Result<(), Box<dyn Error>> {
-    //     assert_eq!(part2::run("inputtest.txt")?, 1623178306);
-    //     Ok(())
-    // }
+    #[test]
+    fn test_part2() -> Result<(), Box<dyn Error>> {
+        assert_eq!((part2::run("inputtest.txt")? as u64), 301);
+        Ok(())
+    }
 
-    // #[test]
-    // fn part2_ans() -> Result<(), Box<dyn Error>> {
-    //     assert_eq!(part2::run("input.txt")?, 4248669215955);
-    //     Ok(())
-    // }
+    #[test]
+    fn part2_ans() -> Result<(), Box<dyn Error>> {
+        assert!((part2::run("input.txt")? as u64) < 3555057453232);
+        assert_eq!((part2::run("input.txt")? as u64), 3555057453229);
+        Ok(())
+    }
 }
