@@ -120,6 +120,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "advent_21"
+version = "0.1.0"
+dependencies = [
+ "advent_lib",
+ "nom",
+ "yap",
+]
+
+[[package]]
 name = "advent_3"
 version = "0.1.0"
 

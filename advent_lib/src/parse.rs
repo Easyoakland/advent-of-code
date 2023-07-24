@@ -159,10 +159,10 @@ pub mod yap {
     }
 
     /// Attempts to parse all remainder of input until next None. Consumes nothing on fail.
-    pub fn all_consuming<I, O, F>(input: &mut I, parser: F) -> Result<O, ParseError<I::Item>>
+    pub fn all_consuming<'a, I, O, F>(input: &'a mut I, parser: F) -> Result<O, ParseError<I::Item>>
     where
         I: Tokens,
-        F: FnOnce(&mut I) -> O,
+        F: FnOnce(&mut I) -> O + 'a,
     {
         let before_consuming = input.location();
         let res = parser(input);
