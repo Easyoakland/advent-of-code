@@ -4,10 +4,12 @@ mod data {
     use advent_lib::{cord::NDCord, parse::yap::digit1};
     use std::{collections::BTreeMap, str::FromStr};
     use yap::{types::StrTokens, IntoTokens, Tokens};
-    pub type Val = usize;
+    pub type Val = isize;
+    pub type DirVal = isize;
     pub type Pos = NDCord<Val, 2>;
+    pub type Dir = NDCord<DirVal, 2>;
 
-    #[derive(Clone, Copy, Debug)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum PosKind {
         Open,
         Wall,
@@ -57,7 +59,7 @@ mod data {
 
     #[derive(Clone, Copy, Debug)]
     pub enum Move {
-        Forward(usize),
+        Forward(Val),
         Rotate(Rotation),
     }
 
@@ -84,6 +86,12 @@ mod data {
             let tok = &mut s.into_tokens();
             tok.try_into()
         }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Facing {
+        pub pos: Pos,
+        pub dir: Dir,
     }
 }
 
@@ -137,7 +145,7 @@ mod parse {
 mod part1 {
     use super::*;
     use crate::{
-        data::{Pos, Val},
+        data::{Dir, Facing, Pos, PosKind, Val},
         parse::parse_input,
     };
     use advent_lib::parse::read_and_leak;
@@ -145,9 +153,58 @@ mod part1 {
     pub fn run(file_name: &str) -> Result<Val, Box<dyn Error>> {
         let input = read_and_leak(file_name)?;
         let (map, moves) = parse_input(input)?;
-        let extents = Pos::extents_iter(map.iter().map(|x| *x.0));
-        advent_lib::dbc!(extents);
-        todo!()
+        let extents = Pos::extents_iter(map.iter().map(|x| *x.0)).expect("Nonempty iter");
+        let mut facing = Facing {
+            pos: *map
+                .iter()
+                .find(|(pos, &x)| pos[1] == 1 && x == PosKind::Open) // This works because Btree is ordered
+                .expect("Starting position")
+                .0,
+            dir: Dir::from([1, 0]),
+        };
+        for mov in moves {
+            match mov {
+                data::Move::Forward(distance) => {
+                    let mut new_pos = facing.pos;
+                    // Keep moving in that direction until done.
+                    for _ in 0..distance {
+                        let mut next_pos = new_pos + facing.dir;
+                        new_pos = loop {
+                            match map.get(&next_pos) {
+                                // Don't change position if will hit a wall.
+                                Some(&PosKind::Wall) => break new_pos,
+                                // Change position if won't hit a wall.
+                                Some(&PosKind::Open) => break next_pos,
+                                // Loop around if the map doesn't include that position.
+                                None => {
+                                    next_pos = Pos::from([
+                                        next_pos[0].rem_euclid(extents.1[0]),
+                                        next_pos[1].rem_euclid(extents.1[1]),
+                                    ]) + facing.dir;
+                                }
+                            }
+                        };
+                    }
+                    facing.pos = new_pos;
+                }
+                data::Move::Rotate(rotation) => {
+                    facing.dir.swap(0, 1);
+                    match rotation {
+                        // 1,0 -> 0,-1 -> -1,0 -> 0,1
+                        data::Rotation::Left => facing.dir[1] *= -1,
+                        // 1,0 -> 0,1 -> -1,0 -> 0,-1
+                        data::Rotation::Right => facing.dir[0] *= -1,
+                    }
+                }
+            }
+        }
+        let mut direction_points = 0;
+        while facing.dir != [1, 0].into() {
+            facing.dir.swap(0, 1);
+            facing.dir[1] *= -1;
+            direction_points += 1;
+        }
+        Ok(1000 * facing.pos[1] + 4 * facing.pos[0] + direction_points)
     }
 }
 
@@ -167,11 +224,11 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn part1_ans() -> Result<(), Box<dyn Error>> {
-    //     assert_eq!((part1::run("input.txt")? as u64), 31017034894002);
-    //     Ok(())
-    // }
+    #[test]
+    fn part1_ans() -> Result<(), Box<dyn Error>> {
+        assert!(part1::run("input.txt")? > 61338);
+        Ok(())
+    }
 
     // #[test]
     // fn test_part2() -> Result<(), Box<dyn Error>> {
