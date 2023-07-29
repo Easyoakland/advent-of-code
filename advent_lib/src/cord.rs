@@ -26,26 +26,26 @@ impl<T: PrimInt + Sum + 'static> CordData for T {}
 ///
 /// Capable of things like neighborhood calculation, cordinate addition, interpolation, etc...
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deref, DerefMut)]
-pub struct Cord<T, const DIM: usize>(pub [T; DIM]);
+pub struct NDCord<T, const DIM: usize>(pub [T; DIM]);
 
-impl<T: Default + Copy, const DIM: usize> Default for Cord<T, DIM> {
+impl<T: Default + Copy, const DIM: usize> Default for NDCord<T, DIM> {
     fn default() -> Self {
         Self([Default::default(); DIM])
     }
 }
 
-impl<T, const DIM: usize> Add for Cord<T, DIM>
+impl<T, const DIM: usize> Add for NDCord<T, DIM>
 where
     T: CordData,
 {
-    type Output = Cord<T, DIM>;
+    type Output = NDCord<T, DIM>;
 
     fn add(self, rhs: Self) -> Self::Output {
         self.apply(rhs, T::add)
     }
 }
 
-impl<T, const DIM: usize> AddAssign for Cord<T, DIM>
+impl<T, const DIM: usize> AddAssign for NDCord<T, DIM>
 where
     T: CordData,
 {
@@ -54,18 +54,18 @@ where
     }
 }
 
-impl<T, const DIM: usize> Sub for Cord<T, DIM>
+impl<T, const DIM: usize> Sub for NDCord<T, DIM>
 where
     T: CordData,
 {
-    type Output = Cord<T, DIM>;
+    type Output = NDCord<T, DIM>;
 
     fn sub(self, rhs: Self) -> Self::Output {
         self.apply(rhs, T::sub)
     }
 }
 
-impl<T, const DIM: usize> SubAssign for Cord<T, DIM>
+impl<T, const DIM: usize> SubAssign for NDCord<T, DIM>
 where
     T: CordData,
 {
@@ -79,19 +79,19 @@ where
 #[derive(Clone, Debug)]
 pub struct MooreNeighborhoodIterator<I, T: CordData, const DIM: usize> {
     iterator: I,
-    cord: Cord<T, DIM>,
+    cord: NDCord<T, DIM>,
     radius: usize,
 }
 
-impl<I: Iterator<Item = Cord<T, DIM>>, T: CordData, const DIM: usize> Iterator
+impl<I: Iterator<Item = NDCord<T, DIM>>, T: CordData, const DIM: usize> Iterator
     for MooreNeighborhoodIterator<I, T, DIM>
 {
-    type Item = Cord<T, DIM>;
+    type Item = NDCord<T, DIM>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // Each radius increases number of cells in each dimension by 2 (each extent direction by 1) starting with 1 cell at radius = 1.
         while let Some(cord_offset) = self.iterator.next() {
-            let smallest_neighbor = Cord(self.cord.0.map(|x| {
+            let smallest_neighbor = NDCord(self.cord.0.map(|x| {
                 x - cast(self.radius).expect("Can't cast the radius to cord's datatype.")
             }));
             let new_cord = smallest_neighbor + cord_offset;
@@ -115,13 +115,13 @@ impl<I: Iterator<Item = Cord<T, DIM>>, T: CordData, const DIM: usize> Iterator
     }
 }
 
-impl<T, const DIM: usize> Cord<T, DIM>
+impl<T, const DIM: usize> NDCord<T, DIM>
 where
     T: CordData,
 {
-    pub fn apply<O>(self, other: Self, func: impl Fn(T, T) -> O) -> Cord<O, DIM> {
+    pub fn apply<O>(self, other: Self, func: impl Fn(T, T) -> O) -> NDCord<O, DIM> {
         let mut other = other.0.into_iter();
-        Cord(
+        NDCord(
             self.0
                 .map(|x| func(x, other.next().expect("Same length arrays"))),
         )
@@ -136,13 +136,13 @@ where
     pub fn moore_neighborhood(
         &self,
         radius: usize,
-    ) -> MooreNeighborhoodIterator<impl Iterator<Item = Cord<T, DIM>> + Clone, T, DIM> {
+    ) -> MooreNeighborhoodIterator<impl Iterator<Item = NDCord<T, DIM>> + Clone, T, DIM> {
         let dim_max = cast::<usize, T>(radius + radius)
             .expect("Can't convert radius + radius into cord's datatype.");
 
         let iterator =
             NDCartesianProduct::new(array::from_fn(|_| range_inclusive(Zero::zero(), dim_max)))
-                .map(Cord);
+                .map(NDCord);
 
         MooreNeighborhoodIterator {
             iterator,
@@ -153,7 +153,7 @@ where
 
     /// Radius is manhattan distance of furthest neighbors.
     /// Neumann neighborhood is all cells a manhattan distance of the radius or smaller.
-    pub fn neumann_neighborhood(&self, radius: usize) -> impl Iterator<Item = Cord<T, DIM>> + '_ {
+    pub fn neumann_neighborhood(&self, radius: usize) -> impl Iterator<Item = NDCord<T, DIM>> + '_ {
         let neighbors = self.moore_neighborhood(radius);
         neighbors.filter(move |&x| {
             x.manhattan_distance(self)
@@ -162,30 +162,47 @@ where
     }
 
     /// Returns a vector of every cordinate with an x or y value between self and other inclusive.
-    pub fn interpolate(&self, other: &Self) -> impl Iterator<Item = Cord<T, DIM>> {
+    pub fn interpolate(&self, other: &Self) -> impl Iterator<Item = NDCord<T, DIM>> {
         // Use min and max so range doesn't silently emit no values (high..low is length 0 range)
         let ranges = array::from_fn(|i| {
             range_inclusive(self.0[i].min(other.0[i]), self.0[i].max(other.0[i]))
         });
-        NDCartesianProduct::new(ranges).map(Cord)
+        NDCartesianProduct::new(ranges).map(NDCord)
+    }
+
+    /// Finds the largest value in each dimension and smallest value in each dimension as the pair `(min, max)`.
+    pub fn extents(&self, other: &Self) -> (Self, Self) {
+        let smallest = array::from_fn(|axis| self[axis].min(other[axis]));
+        let largest = array::from_fn(|axis| self[axis].max(other[axis]));
+        (smallest.into(), largest.into())
+    }
+
+    /// Finds the overall extents for many [`NDCord`] with [`NDCord::extents`]. Handles empty iterator with [`None`].
+    /// # Return
+    /// `(min_per_axis, max_per_axis)`
+    pub fn extents_iter(mut it: impl Iterator<Item = Self>) -> Option<(Self, Self)> {
+        let first = it.next()?;
+        Some(it.fold((first, first), |(min, max), x| {
+            (x.extents(&min).0, x.extents(&max).1)
+        }))
     }
 
     /// Find the cordinate that coresponds to a given offset where maximum width of each axis is given.
     /// Fills values of coordinates from greatest index to least.
     /// ```
-    /// # use advent_lib::cord::Cord;
+    /// # use advent_lib::cord::NDCord;
     /// # use core::num::NonZeroUsize;
     /// // x x
     /// // x x
     /// // x x
     /// let widths = [2, 3].map(|x| NonZeroUsize::new(x).unwrap());
-    /// assert_eq!(Cord::from_offset(0, widths), Cord([0, 0]));
-    /// assert_eq!(Cord::from_offset(1, widths), Cord([1, 0]));
-    /// assert_eq!(Cord::from_offset(2, widths), Cord([0, 1]));
-    /// assert_eq!(Cord::from_offset(3, widths), Cord([1, 1]));
-    /// assert_eq!(Cord::from_offset(4, widths), Cord([0, 2]));
+    /// assert_eq!(NDCord::from_offset(0, widths), NDCord([0, 0]));
+    /// assert_eq!(NDCord::from_offset(1, widths), NDCord([1, 0]));
+    /// assert_eq!(NDCord::from_offset(2, widths), NDCord([0, 1]));
+    /// assert_eq!(NDCord::from_offset(3, widths), NDCord([1, 1]));
+    /// assert_eq!(NDCord::from_offset(4, widths), NDCord([0, 2]));
     /// ```
-    pub fn from_offset(mut offset: usize, widths: [NonZeroUsize; DIM]) -> Cord<T, DIM>
+    pub fn from_offset(mut offset: usize, widths: [NonZeroUsize; DIM]) -> NDCord<T, DIM>
     where
         T: From<usize>,
     {
@@ -204,14 +221,14 @@ where
     }
 }
 
-impl<T: CordData, const DIM: usize> From<[T; DIM]> for Cord<T, DIM> {
+impl<T: CordData, const DIM: usize> From<[T; DIM]> for NDCord<T, DIM> {
     fn from(value: [T; DIM]) -> Self {
-        Cord(value)
+        NDCord(value)
     }
 }
 
-impl<T, const DIM: usize> From<Cord<T, DIM>> for [T; DIM] {
-    fn from(value: Cord<T, DIM>) -> Self {
+impl<T, const DIM: usize> From<NDCord<T, DIM>> for [T; DIM] {
+    fn from(value: NDCord<T, DIM>) -> Self {
         value.0
     }
 }
@@ -222,29 +239,29 @@ mod tests {
 
     #[test]
     fn manhattan_distance_test() {
-        let cord1 = Cord([-2isize, 4]);
-        let cord2 = Cord([498, 6]);
+        let cord1 = NDCord([-2isize, 4]);
+        let cord2 = NDCord([498, 6]);
         let out = cord1.manhattan_distance(&cord2);
         assert_eq!(out, 500 + 2);
     }
 
     #[test]
     fn moore_neighborhood_test() {
-        let cord = Cord([-8, 4]);
+        let cord = NDCord([-8, 4]);
         let out = cord.moore_neighborhood(1);
         let out_size = out.size_hint();
         let out_vec = out.collect::<Vec<_>>();
         assert_eq!(
             out_vec,
             vec![
-                Cord([-9, 3]),
-                Cord([-9, 4]),
-                Cord([-9, 5]),
-                Cord([-8, 3]),
-                Cord([-8, 5]),
-                Cord([-7, 3]),
-                Cord([-7, 4]),
-                Cord([-7, 5])
+                NDCord([-9, 3]),
+                NDCord([-9, 4]),
+                NDCord([-9, 5]),
+                NDCord([-8, 3]),
+                NDCord([-8, 5]),
+                NDCord([-7, 3]),
+                NDCord([-7, 4]),
+                NDCord([-7, 5])
             ]
         );
         assert_eq!(out_vec.len(), out_size.0);
@@ -258,15 +275,15 @@ mod tests {
         assert_eq!(
             out_vec,
             vec![
-                Cord([-10, 2]),Cord([-10, 3]),Cord([-10, 4]),Cord([-10, 5]),Cord([-10, 6]),
-                Cord([-9, 2]), Cord([-9, 3]), Cord([-9, 4]), Cord([-9, 5]), Cord([-9, 6]),
-                Cord([-8, 2]), Cord([-8, 3]),              Cord([-8, 5]), Cord([-8, 6]),
-                Cord([-7, 2]), Cord([-7, 3]), Cord([-7, 4]), Cord([-7, 5]), Cord([-7, 6]),
-                Cord([-6, 2]), Cord([-6, 3]), Cord([-6, 4]), Cord([-6, 5]), Cord([-6, 6])
+                NDCord([-10, 2]),NDCord([-10, 3]),NDCord([-10, 4]),NDCord([-10, 5]),NDCord([-10, 6]),
+                NDCord([-9, 2]), NDCord([-9, 3]), NDCord([-9, 4]), NDCord([-9, 5]), NDCord([-9, 6]),
+                NDCord([-8, 2]), NDCord([-8, 3]),              NDCord([-8, 5]), NDCord([-8, 6]),
+                NDCord([-7, 2]), NDCord([-7, 3]), NDCord([-7, 4]), NDCord([-7, 5]), NDCord([-7, 6]),
+                NDCord([-6, 2]), NDCord([-6, 3]), NDCord([-6, 4]), NDCord([-6, 5]), NDCord([-6, 6])
             ]
         );
 
-        let cord = Cord([0, 0]);
+        let cord = NDCord([0, 0]);
         let out = cord.moore_neighborhood(3);
         let out_size = out.size_hint();
         let out_vec = out.collect::<Vec<_>>();
@@ -276,24 +293,29 @@ mod tests {
         assert_eq!(
             out_vec,
             vec![
-                Cord([-3, -3]),Cord([-3, -2]),Cord([-3, -1]),Cord([-3, 0]),Cord([-3, 1]),Cord([-3, 2]),Cord([-3, 3]),
-                Cord([-2, -3]),Cord([-2, -2]),Cord([-2, -1]),Cord([-2, 0]),Cord([-2, 1]),Cord([-2, 2]),Cord([-2, 3]),
-                Cord([-1, -3]),Cord([-1, -2]),Cord([-1, -1]),Cord([-1, 0]),Cord([-1, 1]),Cord([-1, 2]),Cord([-1, 3]),
-                Cord([0, -3]), Cord([0, -2]), Cord([0, -1]),             Cord([0, 1]), Cord([0, 2]), Cord([0, 3]),
-                Cord([1, -3]), Cord([1, -2]), Cord([1, -1]), Cord([1, 0]), Cord([1, 1]), Cord([1, 2]), Cord([1, 3]),
-                Cord([2, -3]), Cord([2, -2]), Cord([2, -1]), Cord([2, 0]), Cord([2, 1]), Cord([2, 2]), Cord([2, 3]),
-                Cord([3, -3]), Cord([3, -2]), Cord([3, -1]), Cord([3, 0]), Cord([3, 1]), Cord([3, 2]), Cord([3, 3])
+                NDCord([-3, -3]),NDCord([-3, -2]),NDCord([-3, -1]),NDCord([-3, 0]),NDCord([-3, 1]),NDCord([-3, 2]),NDCord([-3, 3]),
+                NDCord([-2, -3]),NDCord([-2, -2]),NDCord([-2, -1]),NDCord([-2, 0]),NDCord([-2, 1]),NDCord([-2, 2]),NDCord([-2, 3]),
+                NDCord([-1, -3]),NDCord([-1, -2]),NDCord([-1, -1]),NDCord([-1, 0]),NDCord([-1, 1]),NDCord([-1, 2]),NDCord([-1, 3]),
+                NDCord([0, -3]), NDCord([0, -2]), NDCord([0, -1]),             NDCord([0, 1]), NDCord([0, 2]), NDCord([0, 3]),
+                NDCord([1, -3]), NDCord([1, -2]), NDCord([1, -1]), NDCord([1, 0]), NDCord([1, 1]), NDCord([1, 2]), NDCord([1, 3]),
+                NDCord([2, -3]), NDCord([2, -2]), NDCord([2, -1]), NDCord([2, 0]), NDCord([2, 1]), NDCord([2, 2]), NDCord([2, 3]),
+                NDCord([3, -3]), NDCord([3, -2]), NDCord([3, -1]), NDCord([3, 0]), NDCord([3, 1]), NDCord([3, 2]), NDCord([3, 3])
             ]
         );
     }
 
     #[test]
     fn neumann_neighborhood_test() {
-        let cord = Cord([-8, 4]);
+        let cord = NDCord([-8, 4]);
         let out = cord.neumann_neighborhood(1);
         assert_eq!(
             out.collect::<Vec<_>>(),
-            vec![Cord([-9, 4]), Cord([-8, 3]), Cord([-8, 5]), Cord([-7, 4])]
+            vec![
+                NDCord([-9, 4]),
+                NDCord([-8, 3]),
+                NDCord([-8, 5]),
+                NDCord([-7, 4])
+            ]
         );
 
         let out: Vec<_> = cord.neumann_neighborhood(2).collect();
@@ -301,55 +323,61 @@ mod tests {
         assert_eq!(
             out,
             vec![
-                                          Cord([-10, 4]),
-                             Cord([-9, 3]), Cord([-9, 4]), Cord([-9, 5]),
-                Cord([-8, 2]), Cord([-8, 3]),              Cord([-8, 5]), Cord([-8, 6]),
-                             Cord([-7, 3]), Cord([-7, 4]), Cord([-7, 5]),
-                                          Cord([-6, 4])
+                                          NDCord([-10, 4]),
+                             NDCord([-9, 3]), NDCord([-9, 4]), NDCord([-9, 5]),
+                NDCord([-8, 2]), NDCord([-8, 3]),              NDCord([-8, 5]), NDCord([-8, 6]),
+                             NDCord([-7, 3]), NDCord([-7, 4]), NDCord([-7, 5]),
+                                          NDCord([-6, 4])
             ]
         );
 
-        let cord = Cord([0, 0]);
+        let cord = NDCord([0, 0]);
         let out: Vec<_> = cord.neumann_neighborhood(3).collect();
         #[rustfmt::skip]
         assert_eq!(
             out,
             vec![
-                                                       Cord([-3, 0]),
-                                          Cord([-2, -1]),Cord([-2, 0]), Cord([-2, 1]),
-                             Cord([-1, -2]),Cord([-1, -1]),Cord([-1, 0]), Cord([-1, 1]), Cord([-1, 2]),
-                Cord([0, -3]), Cord([0, -2]), Cord([0, -1]),              Cord([0, 1]),  Cord([0, 2]), Cord([0, 3]),
-                             Cord([1, -2]), Cord([1, -1]), Cord([1, 0]),  Cord([1, 1]), Cord([1, 2]),
-                                          Cord([2, -1]), Cord([2, 0]),  Cord([2, 1]),
-                                                       Cord([3, 0])
+                                                       NDCord([-3, 0]),
+                                          NDCord([-2, -1]),NDCord([-2, 0]), NDCord([-2, 1]),
+                             NDCord([-1, -2]),NDCord([-1, -1]),NDCord([-1, 0]), NDCord([-1, 1]), NDCord([-1, 2]),
+                NDCord([0, -3]), NDCord([0, -2]), NDCord([0, -1]),              NDCord([0, 1]),  NDCord([0, 2]), NDCord([0, 3]),
+                             NDCord([1, -2]), NDCord([1, -1]), NDCord([1, 0]),  NDCord([1, 1]), NDCord([1, 2]),
+                                          NDCord([2, -1]), NDCord([2, 0]),  NDCord([2, 1]),
+                                                       NDCord([3, 0])
             ]
         );
     }
 
     #[test]
     fn interpolate_test() {
-        let cord1 = Cord([498, 4]);
-        let cord2 = Cord([498, 6]);
+        let cord1 = NDCord([498, 4]);
+        let cord2 = NDCord([498, 6]);
         let out: Vec<_> = cord1.interpolate(&cord2).collect();
-        assert_eq!(out, vec![Cord([498, 4]), Cord([498, 5]), Cord([498, 6])]);
+        assert_eq!(
+            out,
+            vec![NDCord([498, 4]), NDCord([498, 5]), NDCord([498, 6])]
+        );
 
-        let cord1 = Cord([498, 6]);
-        let cord2 = Cord([496, 6]);
+        let cord1 = NDCord([498, 6]);
+        let cord2 = NDCord([496, 6]);
         let out: Vec<_> = cord1.interpolate(&cord2).collect();
-        assert_eq!(out, vec![Cord([496, 6]), Cord([497, 6]), Cord([498, 6])]);
+        assert_eq!(
+            out,
+            vec![NDCord([496, 6]), NDCord([497, 6]), NDCord([498, 6])]
+        );
 
-        let cord1 = Cord([498, 6]);
-        let cord2 = Cord([496, 7]);
+        let cord1 = NDCord([498, 6]);
+        let cord2 = NDCord([496, 7]);
         let out: Vec<_> = cord1.interpolate(&cord2).collect();
         assert_eq!(
             out,
             vec![
-                Cord([496, 6]),
-                Cord([496, 7]),
-                Cord([497, 6]),
-                Cord([497, 7]),
-                Cord([498, 6]),
-                Cord([498, 7])
+                NDCord([496, 6]),
+                NDCord([496, 7]),
+                NDCord([497, 6]),
+                NDCord([497, 7]),
+                NDCord([498, 6]),
+                NDCord([498, 7])
             ]
         );
     }
@@ -361,11 +389,11 @@ mod tests {
             // x x
             // x x
             let widths = [2, 3].map(|x| NonZeroUsize::new(x).unwrap());
-            assert_eq!(Cord::from_offset(0, widths), Cord([0, 0]));
-            assert_eq!(Cord::from_offset(1, widths), Cord([1, 0]));
-            assert_eq!(Cord::from_offset(2, widths), Cord([0, 1]));
-            assert_eq!(Cord::from_offset(3, widths), Cord([1, 1]));
-            assert_eq!(Cord::from_offset(4, widths), Cord([0, 2]));
+            assert_eq!(NDCord::from_offset(0, widths), NDCord([0, 0]));
+            assert_eq!(NDCord::from_offset(1, widths), NDCord([1, 0]));
+            assert_eq!(NDCord::from_offset(2, widths), NDCord([0, 1]));
+            assert_eq!(NDCord::from_offset(3, widths), NDCord([1, 1]));
+            assert_eq!(NDCord::from_offset(4, widths), NDCord([0, 2]));
         }
         {
             // z = 0
@@ -378,10 +406,10 @@ mod tests {
             //   x
             //   x
             let widths = [1, 2, 3].map(|x| NonZeroUsize::new(x).unwrap());
-            assert_eq!(Cord::from_offset(0, widths), Cord([0, 0, 0]));
-            assert_eq!(Cord::from_offset(1, widths), Cord([0, 1, 0]));
-            assert_eq!(Cord::from_offset(2, widths), Cord([0, 0, 1]));
-            assert_eq!(Cord::from_offset(3, widths), Cord([0, 1, 1]));
+            assert_eq!(NDCord::from_offset(0, widths), NDCord([0, 0, 0]));
+            assert_eq!(NDCord::from_offset(1, widths), NDCord([0, 1, 0]));
+            assert_eq!(NDCord::from_offset(2, widths), NDCord([0, 0, 1]));
+            assert_eq!(NDCord::from_offset(3, widths), NDCord([0, 1, 1]));
         }
     }
 }

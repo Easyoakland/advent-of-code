@@ -1,5 +1,5 @@
 use advent_lib::{
-    cord::Cord,
+    cord::NDCord,
     parse::{nom::parse_from, read_and_leak},
 };
 use std::error::Error;
@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-type Voxel = Cord<isize, 3>;
+type Voxel = NDCord<isize, 3>;
 
 mod parse {
     use nom::{

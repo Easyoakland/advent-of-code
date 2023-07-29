@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use advent_lib::dbc;
-use advent_lib::{cord::Cord, parse::read_and_leak};
+use advent_lib::{cord::NDCord, parse::read_and_leak};
 use data::{Action, Rock};
 use std::{
     collections::{BTreeSet, HashSet},
@@ -58,39 +58,39 @@ mod data {
     #[derive(Clone, Hash)]
     pub struct Rock {
         pub kind: RockKind,
-        pub cord: Cord<CordType, 2>, // bottom left position
+        pub cord: NDCord<CordType, 2>, // bottom left position
     }
 
     impl Rock {
-        pub fn hitbox(&self) -> Box<dyn Iterator<Item = Cord<CordType, 2>>> {
+        pub fn hitbox(&self) -> Box<dyn Iterator<Item = NDCord<CordType, 2>>> {
             match &self.kind {
-                RockKind::One => Box::new(self.cord.interpolate(&(self.cord + Cord([3, 0])))),
+                RockKind::One => Box::new(self.cord.interpolate(&(self.cord + NDCord([3, 0])))),
                 RockKind::Two => Box::new(
-                    std::iter::once(self.cord + Cord([1, 0]))
+                    std::iter::once(self.cord + NDCord([1, 0]))
                         .chain(
-                            (self.cord + Cord([0, 1]))
-                                .interpolate(&((self.cord + Cord([0, 1])) + Cord([2, 0]))),
+                            (self.cord + NDCord([0, 1]))
+                                .interpolate(&((self.cord + NDCord([0, 1])) + NDCord([2, 0]))),
                         )
-                        .chain(std::iter::once(self.cord + Cord([1, 2]))),
+                        .chain(std::iter::once(self.cord + NDCord([1, 2]))),
                 ),
-                RockKind::Three => Box::new(
-                    self.cord
-                        .interpolate(&(self.cord + Cord([2, 0])))
-                        .chain((self.cord + Cord([2, 1])).interpolate(&(self.cord + Cord([2, 2])))),
-                ),
-                RockKind::Four => Box::new(self.cord.interpolate(&(self.cord + Cord([0, 3])))),
-                RockKind::Five => Box::new(self.cord.interpolate(&(self.cord + Cord([1, 1])))),
+                RockKind::Three => {
+                    Box::new(self.cord.interpolate(&(self.cord + NDCord([2, 0]))).chain(
+                        (self.cord + NDCord([2, 1])).interpolate(&(self.cord + NDCord([2, 2]))),
+                    ))
+                }
+                RockKind::Four => Box::new(self.cord.interpolate(&(self.cord + NDCord([0, 3])))),
+                RockKind::Five => Box::new(self.cord.interpolate(&(self.cord + NDCord([1, 1])))),
             }
         }
 
         /// Returns true if hitbox intersects occupied cells
-        fn hitbox_check(&self, occupied_cells: &BTreeSet<Cord<CordType, 2>>) -> bool {
+        fn hitbox_check(&self, occupied_cells: &BTreeSet<NDCord<CordType, 2>>) -> bool {
             self.hitbox().any(|cord| occupied_cells.contains(&cord))
         }
-        pub fn fall(&mut self, occupied_cells: &BTreeSet<Cord<CordType, 2>>) -> bool {
+        pub fn fall(&mut self, occupied_cells: &BTreeSet<NDCord<CordType, 2>>) -> bool {
             let proposed_next = {
                 let mut out = self.clone();
-                out.cord -= Cord([0, 1]);
+                out.cord -= NDCord([0, 1]);
                 out
             };
             if !proposed_next.hitbox_check(occupied_cells) {
@@ -129,7 +129,7 @@ mod data {
                     if self
                         .hitbox()
                         .collect::<HashSet<_>>()
-                        .contains(&Cord([x, y]))
+                        .contains(&NDCord([x, y]))
                     {
                         write!(f, "#")?;
                     } else {
@@ -150,8 +150,8 @@ mod data {
 
     #[derive(Clone)]
     pub struct Grid {
-        pub occupied_cells: BTreeSet<Cord<CordType, 2>>,
-        pub highlight_cells: HashSet<Cord<CordType, 2>>,
+        pub occupied_cells: BTreeSet<NDCord<CordType, 2>>,
+        pub highlight_cells: HashSet<NDCord<CordType, 2>>,
         pub highest: usize,
     }
 
@@ -168,9 +168,9 @@ mod data {
             {
                 write!(f, "|")?;
                 for x in 1..=CHAMBER_WIDTH {
-                    if self.highlight_cells.contains(&Cord([x, y])) {
+                    if self.highlight_cells.contains(&NDCord([x, y])) {
                         write!(f, "@")?;
-                    } else if self.occupied_cells.contains(&Cord([x, y])) {
+                    } else if self.occupied_cells.contains(&NDCord([x, y])) {
                         write!(f, "#")?;
                     } else {
                         write!(f, ".")?;
@@ -187,7 +187,7 @@ const CHAMBER_WIDTH: usize = 7;
 
 fn drop_rock(
     rock: &mut Rock,
-    occupied_cells: &mut BTreeSet<Cord<CordType, 2>>,
+    occupied_cells: &mut BTreeSet<NDCord<CordType, 2>>,
     actions: &mut impl Iterator<Item = Action>,
 ) {
     while let Some(action) = actions.next() {
@@ -200,9 +200,9 @@ fn drop_rock(
                 if (2..=CHAMBER_WIDTH).contains(&rock.cord[0])
                     && !rock
                         .hitbox()
-                        .any(|cord| occupied_cells.contains(&(cord - Cord([1, 0]))))
+                        .any(|cord| occupied_cells.contains(&(cord - NDCord([1, 0]))))
                 {
-                    rock.cord -= Cord([1, 0])
+                    rock.cord -= NDCord([1, 0])
                 }
             }
             Action::Right => {
@@ -213,9 +213,9 @@ fn drop_rock(
                 if (1..CHAMBER_WIDTH).contains(&(rock.hitbox().fold(0, |acc, c| acc.max(c[0]))))
                     && !rock
                         .hitbox()
-                        .any(|cord| occupied_cells.contains(&(cord + Cord([1, 0]))))
+                        .any(|cord| occupied_cells.contains(&(cord + NDCord([1, 0]))))
                 {
-                    rock.cord += Cord([1, 0])
+                    rock.cord += NDCord([1, 0])
                 }
             }
         }
@@ -242,7 +242,7 @@ mod part1 {
         let actions = parse::parse_input(input);
         let mut actions = actions.into_iter().cycle();
         let mut grid = Grid {
-            occupied_cells: Cord([0, 0]).interpolate(&Cord([8, 0])).collect(),
+            occupied_cells: NDCord([0, 0]).interpolate(&NDCord([8, 0])).collect(),
             highest: 0,
             highlight_cells: HashSet::new(),
         };
@@ -250,7 +250,7 @@ mod part1 {
             // Each rock appears so that its left edge is two units away from the left wall and its bottom edge is three units above the highest rock in the room (or the floor, if there isn't one).
             let mut rock = Rock {
                 kind: ((i % TYPES_OF_ROCK) + 1).into(),
-                cord: Cord([3, grid.highest + 4]),
+                cord: NDCord([3, grid.highest + 4]),
             };
 
             if LOGGING {
@@ -343,7 +343,7 @@ mod part2 {
         let action_len = actions.len();
         let mut actions = actions.into_iter().cycle();
         let mut grid = Grid {
-            occupied_cells: Cord([0, 0]).interpolate(&Cord([8, 0])).collect(),
+            occupied_cells: NDCord([0, 0]).interpolate(&NDCord([8, 0])).collect(),
             highest: 0,
             highlight_cells: HashSet::new(),
         };
@@ -360,7 +360,7 @@ mod part2 {
             // Each rock appears so that its left edge is two units away from the left wall and its bottom edge is three units above the highest rock in the room (or the floor, if there isn't one).
             let mut rock = Rock {
                 kind: ((rnd % TYPES_OF_ROCK) + 1).into(),
-                cord: Cord([3, grid.highest + 4]),
+                cord: NDCord([3, grid.highest + 4]),
             };
 
             if LOGGING {
@@ -424,7 +424,7 @@ mod part2 {
                 .hash(&mut hasher);
                 grid.occupied_cells
                     .iter()
-                    .map(|&c| c - Cord([0, min_col])) // Normalize y value so lowest occupied cell is at 0 for hash purposes.
+                    .map(|&c| c - NDCord([0, min_col])) // Normalize y value so lowest occupied cell is at 0 for hash purposes.
                     .collect::<BTreeSet<_>>()
                     .hash(&mut hasher);
                 rock.kind.hash(&mut hasher); // Only care about rock's type not its position
@@ -452,7 +452,7 @@ mod part2 {
                     // Shift all occupied cells upward the amount that was skipped.
                     let mut to_add = Vec::new();
                     for cell in &grid.occupied_cells {
-                        to_add.push(Cord([cell[0], cell[1] + new_height - old_heighest]));
+                        to_add.push(NDCord([cell[0], cell[1] + new_height - old_heighest]));
                     }
                     grid.occupied_cells.clear();
                     grid.occupied_cells.extend(to_add.iter());
