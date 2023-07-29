@@ -92,6 +92,7 @@ pub mod yap {
     use std::{borrow::Borrow, char, str::FromStr};
     use yap::Tokens;
 
+    /// Attempt to parse a tag from an input.
     pub fn tag<Input, T>(input: &mut Input, tag: T) -> Option<T>
     where
         Input: Tokens,
@@ -106,7 +107,8 @@ pub mod yap {
         }
     }
 
-    pub fn parse_from<I, O, F>(
+    /// Use [`str::parse`] to parse some amount of input after taking some input as dictated by a function.
+    pub fn parse_from1<I, O, F>(
         input: &mut I,
         take_while: F,
     ) -> Option<Result<O, <O as FromStr>::Err>>
@@ -123,17 +125,17 @@ pub mod yap {
         }
     }
 
-    // Parses at least 1 digit.
+    /// Parses at least 1 digit.
     pub fn digit1<I, O>(input: &mut I) -> Option<Result<O, <O as FromStr>::Err>>
     where
         I: Tokens<Item = char>,
         O: FromStr,
     {
         let take_while = |t: &char| t.is_numeric();
-        parse_from(input, take_while)
+        parse_from1(input, take_while)
     }
 
-    // Parses at least 1 digit with an optional sign (+/-) in front.
+    /// Parses at least 1 digit with an optional sign (`+`/`-`) in front.
     pub fn signed_digit1<I, O>(input: &mut I) -> Option<Result<O, <O as FromStr>::Err>>
     where
         I: Tokens<Item = char>,
@@ -141,10 +143,20 @@ pub mod yap {
         <O as FromStr>::Err: std::fmt::Debug,
     {
         let take_while = |&t: &char| t.is_numeric() || t == '+' || t == '-';
-        parse_from(input, take_while)
+        parse_from1(input, take_while)
     }
 
-    /// Parses a line ending of either "\n" (like on linux)  or "\r\n" (like on windows)
+    /// Parses at least 1 alphabetical character.
+    pub fn alpha1<I, O>(input: &mut I) -> Option<Result<O, <O as FromStr>::Err>>
+    where
+        I: Tokens<Item = char>,
+        O: FromStr,
+    {
+        let take_while = |t: &char| t.is_alphabetic();
+        parse_from1(input, take_while)
+    }
+
+    /// Parses a line ending of either `\n` (like on linux)  or `\r\n` (like on windows)
     pub fn line_ending(tokens: &mut impl Tokens<Item = char>) -> Option<&str> {
         yap::one_of!(tokens;
             tokens.optional(|t| t.token('\n').then_some("\n")),
