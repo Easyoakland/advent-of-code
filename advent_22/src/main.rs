@@ -157,6 +157,7 @@ mod data {
         }
     }
 
+    #[allow(dead_code)]
     pub fn log_state(
         file: &Path,
         extents: &(Pos, Pos),
@@ -245,24 +246,19 @@ mod parse {
 mod part1 {
     use super::*;
     use crate::{
-        data::{log_state, Facing, Pos, Val},
+        data::{Facing, Pos, Val},
         parse::parse_input,
     };
     use advent_lib::parse::read_and_leak;
-    use std::{collections::HashMap, path::Path};
 
     pub fn run(file_name: &str) -> Result<Val, Box<dyn Error>> {
         let input = read_and_leak(file_name)?;
         let (map, moves) = parse_input(input)?;
         let extents = Pos::extents_iter(map.iter().map(|x| *x.0)).expect("Nonempty iter");
         let mut facing = Facing::from_map_start(&map);
-        let mut backtrace = HashMap::new();
-        backtrace.insert(facing.pos.clone(), facing.dir);
         for mov in moves {
             facing.mov(mov, &map, &extents);
-            backtrace.insert(facing.pos.clone(), facing.dir);
         }
-        log_state(&Path::new("../out.txt"), &extents, &map, &backtrace)?;
         let mut direction_points = 0;
         while facing.dir != [1, 0].into() {
             facing.dir.swap(0, 1);
