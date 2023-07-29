@@ -129,6 +129,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "advent_22"
+version = "0.1.0"
+dependencies = [
+ "advent_lib",
+ "yap",
+]
+
+[[package]]
 name = "advent_3"
 version = "0.1.0"
 
