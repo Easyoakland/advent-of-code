@@ -181,7 +181,7 @@ where
         })
     }
 
-    /// Returns a vector of every cordinate with an x or y value between self and other inclusive.
+    /// Return an iterator over all points (inclusive) between `self` and `other`. Order is lexicographical.
     pub fn interpolate(&self, other: &Self) -> impl Iterator<Item = NDCord<T, DIM>> {
         // Use min and max so range doesn't silently emit no values (high..low is length 0 range)
         let ranges = array::from_fn(|i| {

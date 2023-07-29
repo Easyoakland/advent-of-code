@@ -2,7 +2,14 @@ use std::error::Error;
 
 mod data {
     use advent_lib::{cord::NDCord, parse::yap::digit1};
-    use std::{collections::BTreeMap, str::FromStr};
+    use std::{
+        collections::{BTreeMap, HashMap},
+        error::Error,
+        fs::File,
+        io::Write,
+        path::Path,
+        str::FromStr,
+    };
     use yap::{types::StrTokens, IntoTokens, Tokens};
     pub type Val = isize;
     pub type DirVal = isize;
@@ -38,7 +45,7 @@ mod data {
 
     pub type Map = BTreeMap<Pos, PosKind>;
 
-    #[derive(Clone, Copy, Debug)]
+    #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
     pub enum Rotation {
         Left,
         Right,
@@ -57,9 +64,9 @@ mod data {
         }
     }
 
-    #[derive(Clone, Copy, Debug)]
+    #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
     pub enum Move {
-        Forward(Val),
+        Forward(DirVal),
         Rotate(Rotation),
     }
 
@@ -88,10 +95,103 @@ mod data {
         }
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Hash, PartialEq, Eq)]
     pub struct Facing {
         pub pos: Pos,
         pub dir: Dir,
+    }
+
+    impl Facing {
+        pub fn from_map_start(map: &Map) -> Self {
+            Facing {
+                pos: *map
+                    .iter()
+                    .find(|(pos, &x)| pos[1] == 0 && x == PosKind::Open) // This works because Btree is ordered
+                    .expect("Starting position")
+                    .0,
+                dir: Dir::from([1, 0]),
+            }
+        }
+    }
+
+    impl Facing {
+        pub fn mov(&mut self, mov: Move, map: &Map, extents: &(Pos, Pos)) {
+            match mov {
+                Move::Forward(distance) => {
+                    let mut new_pos = self.pos;
+                    // Keep moving in that direction until done.
+                    for _ in 0..distance {
+                        let mut next_pos = new_pos + self.dir;
+                        new_pos = loop {
+                            match map.get(&next_pos) {
+                                // Don't change position if will hit a wall.
+                                Some(&PosKind::Wall) => break new_pos,
+                                // Change position if won't hit a wall.
+                                Some(&PosKind::Open) => {
+                                    // eprintln!("{:?} -> {:?}", &self, next_pos);
+                                    break next_pos;
+                                }
+                                // Loop around if the map doesn't include that position.
+                                None => {
+                                    let a = next_pos + self.dir;
+                                    next_pos = Pos::from([
+                                        a[0].rem_euclid(extents.1[0]),
+                                        a[1].rem_euclid(extents.1[1]),
+                                    ]);
+                                }
+                            }
+                        };
+                    }
+                    self.pos = new_pos;
+                }
+                Move::Rotate(rotation) => {
+                    self.dir.swap(0, 1);
+                    match rotation {
+                        // 1,0 -> 0,-1 -> -1,0 -> 0,1
+                        Rotation::Left => self.dir[1] *= -1,
+                        // 1,0 -> 0,1 -> -1,0 -> 0,-1
+                        Rotation::Right => self.dir[0] *= -1,
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn log_state(
+        file: &Path,
+        extents: &(Pos, Pos),
+        map: &Map,
+        backtrace: &HashMap<Pos, Dir>,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut file = File::create(file)?;
+        let mut extents = extents.clone();
+        extents.0.swap(0, 1);
+        extents.1.swap(0, 1);
+        for cord in extents.0.interpolate(&extents.1).map(|mut x| {
+            x.swap(0, 1);
+            x
+        }) {
+            let mut c = ' ';
+            if let Some(x) = backtrace.get(&cord) {
+                c = match x {
+                    NDCord([1, 0]) => '>',
+                    NDCord([0, 1]) => 'v',
+                    NDCord([-1, 0]) => '<',
+                    NDCord([0, -1]) => '^',
+                    _ => unreachable!("Invalid direction"),
+                };
+            } else if let Some(x) = map.get(&cord) {
+                c = match x {
+                    PosKind::Open => '.',
+                    PosKind::Wall => '#',
+                };
+            }
+            write!(file, "{c}")?;
+            if cord[0] == extents.1[1] {
+                writeln!(file)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -103,7 +203,7 @@ mod parse {
 
     pub fn map(input: &mut StrTokens) -> Map {
         let mut out = BTreeMap::new();
-        let origin = [1, 1];
+        let origin = [0, 0];
         let mut current_pos = origin.clone();
         for c in input.tokens_while(|x| matches!(x, '\n' | ' ' | '.' | '#')) {
             if c == '\n' {
@@ -145,66 +245,31 @@ mod parse {
 mod part1 {
     use super::*;
     use crate::{
-        data::{Dir, Facing, Pos, PosKind, Val},
+        data::{log_state, Facing, Pos, Val},
         parse::parse_input,
     };
     use advent_lib::parse::read_and_leak;
+    use std::{collections::HashMap, path::Path};
 
     pub fn run(file_name: &str) -> Result<Val, Box<dyn Error>> {
         let input = read_and_leak(file_name)?;
         let (map, moves) = parse_input(input)?;
         let extents = Pos::extents_iter(map.iter().map(|x| *x.0)).expect("Nonempty iter");
-        let mut facing = Facing {
-            pos: *map
-                .iter()
-                .find(|(pos, &x)| pos[1] == 1 && x == PosKind::Open) // This works because Btree is ordered
-                .expect("Starting position")
-                .0,
-            dir: Dir::from([1, 0]),
-        };
+        let mut facing = Facing::from_map_start(&map);
+        let mut backtrace = HashMap::new();
+        backtrace.insert(facing.pos.clone(), facing.dir);
         for mov in moves {
-            match mov {
-                data::Move::Forward(distance) => {
-                    let mut new_pos = facing.pos;
-                    // Keep moving in that direction until done.
-                    for _ in 0..distance {
-                        let mut next_pos = new_pos + facing.dir;
-                        new_pos = loop {
-                            match map.get(&next_pos) {
-                                // Don't change position if will hit a wall.
-                                Some(&PosKind::Wall) => break new_pos,
-                                // Change position if won't hit a wall.
-                                Some(&PosKind::Open) => break next_pos,
-                                // Loop around if the map doesn't include that position.
-                                None => {
-                                    next_pos = Pos::from([
-                                        next_pos[0].rem_euclid(extents.1[0]),
-                                        next_pos[1].rem_euclid(extents.1[1]),
-                                    ]) + facing.dir;
-                                }
-                            }
-                        };
-                    }
-                    facing.pos = new_pos;
-                }
-                data::Move::Rotate(rotation) => {
-                    facing.dir.swap(0, 1);
-                    match rotation {
-                        // 1,0 -> 0,-1 -> -1,0 -> 0,1
-                        data::Rotation::Left => facing.dir[1] *= -1,
-                        // 1,0 -> 0,1 -> -1,0 -> 0,-1
-                        data::Rotation::Right => facing.dir[0] *= -1,
-                    }
-                }
-            }
+            facing.mov(mov, &map, &extents);
+            backtrace.insert(facing.pos.clone(), facing.dir);
         }
+        log_state(&Path::new("../out.txt"), &extents, &map, &backtrace)?;
         let mut direction_points = 0;
         while facing.dir != [1, 0].into() {
             facing.dir.swap(0, 1);
             facing.dir[1] *= -1;
             direction_points += 1;
         }
-        Ok(1000 * facing.pos[1] + 4 * facing.pos[0] + direction_points)
+        Ok(1000 * (facing.pos[1] + 1) + 4 * (facing.pos[0] + 1) + direction_points)
     }
 }
 
@@ -227,6 +292,7 @@ mod tests {
     #[test]
     fn part1_ans() -> Result<(), Box<dyn Error>> {
         assert!(part1::run("input.txt")? > 61338);
+        assert_eq!(part1::run("input.txt")?, 126350);
         Ok(())
     }
 
