@@ -114,6 +114,16 @@ mod data {
         }
     }
 
+    pub fn rotate(dir: &mut Dir, rotation: &Rotation) {
+        dir.swap(0, 1);
+        match rotation {
+            // 1,0 -> 0,-1 -> -1,0 -> 0,1
+            Rotation::Left => dir[1] *= -1,
+            // 1,0 -> 0,1 -> -1,0 -> 0,-1
+            Rotation::Right => dir[0] *= -1,
+        }
+    }
+
     impl Facing {
         pub fn mov(&mut self, mov: Move, map: &Map, extents: &(Pos, Pos)) {
             match mov {
@@ -144,15 +154,7 @@ mod data {
                     }
                     self.pos = new_pos;
                 }
-                Move::Rotate(rotation) => {
-                    self.dir.swap(0, 1);
-                    match rotation {
-                        // 1,0 -> 0,-1 -> -1,0 -> 0,1
-                        Rotation::Left => self.dir[1] *= -1,
-                        // 1,0 -> 0,1 -> -1,0 -> 0,-1
-                        Rotation::Right => self.dir[0] *= -1,
-                    }
-                }
+                Move::Rotate(rotation) => rotate(&mut self.dir, &rotation),
             }
         }
     }
@@ -246,7 +248,7 @@ mod parse {
 mod part1 {
     use super::*;
     use crate::{
-        data::{Facing, Pos, Val},
+        data::{rotate, Facing, Pos, Val},
         parse::parse_input,
     };
     use advent_lib::parse::read_and_leak;
@@ -260,9 +262,9 @@ mod part1 {
             facing.mov(mov, &map, &extents);
         }
         let mut direction_points = 0;
+        // Points for direction correspond to number of left rotations to align to the right direction.
         while facing.dir != [1, 0].into() {
-            facing.dir.swap(0, 1);
-            facing.dir[1] *= -1;
+            rotate(&mut facing.dir, &data::Rotation::Left);
             direction_points += 1;
         }
         Ok(1000 * (facing.pos[1] + 1) + 4 * (facing.pos[0] + 1) + direction_points)
