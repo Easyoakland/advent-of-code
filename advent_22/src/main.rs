@@ -125,34 +125,10 @@ mod data {
     }
 
     impl Facing {
-        pub fn mov(&mut self, mov: Move, map: &Map, extents: &(Pos, Pos)) {
+        pub fn mov(&mut self, mov: Move, next_pos: impl Fn(&Facing, DirVal) -> Pos) {
             match mov {
                 Move::Forward(distance) => {
-                    let mut new_pos = self.pos;
-                    // Keep moving in that direction until done.
-                    for _ in 0..distance {
-                        let mut next_pos = new_pos + self.dir;
-                        new_pos = loop {
-                            match map.get(&next_pos) {
-                                // Don't change position if will hit a wall.
-                                Some(&PosKind::Wall) => break new_pos,
-                                // Change position if won't hit a wall.
-                                Some(&PosKind::Open) => {
-                                    // eprintln!("{:?} -> {:?}", &self, next_pos);
-                                    break next_pos;
-                                }
-                                // Loop around if the map doesn't include that position.
-                                None => {
-                                    let a = next_pos + self.dir;
-                                    next_pos = Pos::from([
-                                        a[0].rem_euclid(extents.1[0]),
-                                        a[1].rem_euclid(extents.1[1]),
-                                    ]);
-                                }
-                            }
-                        };
-                    }
-                    self.pos = new_pos;
+                    self.pos = next_pos(&self, distance);
                 }
                 Move::Rotate(rotation) => rotate(&mut self.dir, &rotation),
             }
@@ -248,7 +224,7 @@ mod parse {
 mod part1 {
     use super::*;
     use crate::{
-        data::{rotate, Facing, Pos, Val},
+        data::{rotate, DirVal, Facing, Pos, PosKind, Val},
         parse::parse_input,
     };
     use advent_lib::parse::read_and_leak;
@@ -258,8 +234,35 @@ mod part1 {
         let (map, moves) = parse_input(input)?;
         let extents = Pos::extents_iter(map.iter().map(|x| *x.0)).expect("Nonempty iter");
         let mut facing = Facing::from_map_start(&map);
+        let next_pos = |facing: &Facing, distance: DirVal| {
+            let mut new_pos = facing.pos.clone();
+            // Keep moving in that direction until done.
+            for _ in 0..distance {
+                let mut next_pos = new_pos + facing.dir;
+                new_pos = loop {
+                    match map.get(&next_pos) {
+                        // Don't change position if will hit a wall.
+                        Some(&PosKind::Wall) => break new_pos,
+                        // Change position if won't hit a wall.
+                        Some(&PosKind::Open) => {
+                            // eprintln!("{:?} -> {:?}", &self, next_pos);
+                            break next_pos;
+                        }
+                        // Loop around if the map doesn't include that position.
+                        None => {
+                            let a = next_pos + facing.dir;
+                            next_pos = Pos::from([
+                                a[0].rem_euclid(extents.1[0]),
+                                a[1].rem_euclid(extents.1[1]),
+                            ]);
+                        }
+                    }
+                };
+            }
+            new_pos
+        };
         for mov in moves {
-            facing.mov(mov, &map, &extents);
+            facing.mov(mov, next_pos);
         }
         let mut direction_points = 0;
         // Points for direction correspond to number of left rotations to align to the right direction.
