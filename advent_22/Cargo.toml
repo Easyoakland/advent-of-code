@@ -7,4 +7,7 @@ edition = "2021"
 
 [dependencies]
 advent_lib = { version = "0.1.0", path = "../advent_lib" }
+ndarray = "0.15.6"
+num-derive = "0.4.0"
+num-traits = "0.2.16"
 yap = "0.11.0"

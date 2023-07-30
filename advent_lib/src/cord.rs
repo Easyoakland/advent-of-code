@@ -7,7 +7,7 @@ use std::{
     fmt::Debug,
     iter::Sum,
     num::NonZeroUsize,
-    ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
 };
 
 pub fn abs_diff<T: Sub<Output = T> + PartialOrd>(x: T, y: T) -> T {
@@ -91,6 +91,26 @@ where
 {
     fn mul_assign(&mut self, rhs: T) {
         *self = *self * rhs
+    }
+}
+
+impl<T, const DIM: usize> Div<T> for NDCord<T, DIM>
+where
+    T: CordData,
+{
+    type Output = Self;
+
+    fn div(self, rhs: T) -> Self::Output {
+        array::from_fn(|i| self[i] / rhs).into()
+    }
+}
+
+impl<T, const DIM: usize> DivAssign<T> for NDCord<T, DIM>
+where
+    T: CordData,
+{
+    fn div_assign(&mut self, rhs: T) {
+        *self = *self / rhs
     }
 }
 

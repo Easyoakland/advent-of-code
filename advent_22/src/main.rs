@@ -2,6 +2,9 @@ use std::error::Error;
 
 mod data {
     use advent_lib::{cord::NDCord, parse::yap::digit1};
+    use ndarray::Array2;
+    use num_derive::{FromPrimitive, ToPrimitive};
+    use num_traits::{FromPrimitive, ToPrimitive};
     use std::{
         collections::{BTreeMap, HashMap},
         error::Error,
@@ -12,9 +15,9 @@ mod data {
     };
     use yap::{types::StrTokens, IntoTokens, Tokens};
     pub type Val = isize;
-    pub type DirVal = isize;
+    pub type VelocityVal = isize;
     pub type Pos = NDCord<Val, 2>;
-    pub type Dir = NDCord<DirVal, 2>;
+    pub type Velocity = NDCord<VelocityVal, 2>;
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum PosKind {
@@ -66,7 +69,7 @@ mod data {
 
     #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
     pub enum Move {
-        Forward(DirVal),
+        Forward(VelocityVal),
         Rotate(Rotation),
     }
 
@@ -98,7 +101,7 @@ mod data {
     #[derive(Clone, Debug, Hash, PartialEq, Eq)]
     pub struct Facing {
         pub pos: Pos,
-        pub dir: Dir,
+        pub dir: Velocity,
     }
 
     impl Facing {
@@ -109,12 +112,12 @@ mod data {
                     .find(|(pos, &x)| pos[1] == 0 && x == PosKind::Open) // This works because Btree is ordered
                     .expect("Starting position")
                     .0,
-                dir: Dir::from([1, 0]),
+                dir: Velocity::from([1, 0]),
             }
         }
     }
 
-    pub fn rotate(dir: &mut Dir, rotation: &Rotation) {
+    pub fn rotate(dir: &mut Velocity, rotation: &Rotation) {
         dir.swap(0, 1);
         match rotation {
             // 1,0 -> 0,-1 -> -1,0 -> 0,1
@@ -125,11 +128,9 @@ mod data {
     }
 
     impl Facing {
-        pub fn mov(&mut self, mov: Move, next_pos: impl Fn(&Facing, DirVal) -> Pos) {
+        pub fn mov(&mut self, mov: Move, next_pos: impl Fn(&Facing, VelocityVal) -> Pos) {
             match mov {
-                Move::Forward(distance) => {
-                    self.pos = next_pos(&self, distance);
-                }
+                Move::Forward(distance) => self.pos = next_pos(&self, distance),
                 Move::Rotate(rotation) => rotate(&mut self.dir, &rotation),
             }
         }
@@ -140,7 +141,7 @@ mod data {
         file: &Path,
         extents: &(Pos, Pos),
         map: &Map,
-        backtrace: &HashMap<Pos, Dir>,
+        backtrace: &HashMap<Pos, Velocity>,
     ) -> Result<(), Box<dyn Error>> {
         let mut file = File::create(file)?;
         let mut extents = extents.clone();
@@ -171,6 +172,124 @@ mod data {
             }
         }
         Ok(())
+    }
+
+    // Direction ordered such that clockwise rotation requires adding to the discriminant.
+    #[derive(
+        Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, FromPrimitive, ToPrimitive,
+    )]
+    pub enum Dir {
+        Right = 0,
+        Down = 1,
+        Left = 2,
+        Up = 3,
+    }
+
+    impl Dir {
+        pub fn rotate(self, rotation: &Rotation) -> Self {
+            match rotation {
+                Rotation::Right => {
+                    Self::from_i8((self.to_i8().unwrap() + 1).rem_euclid(4)).unwrap()
+                }
+                Rotation::Left => Self::from_i8((self.to_i8().unwrap() - 1).rem_euclid(4)).unwrap(),
+            }
+        }
+    }
+
+    /// A face has its own map and edges which connect to other [`Face`]s.
+    /// It also has a position on the original input in a 4x4 grid for all possible positions of faces.
+    #[derive(Clone, Debug)]
+    pub struct Face {
+        /// Position of the map from the original unfolded layout. ex `[0,0]` means the top left was the top left of the original folded layout.
+        pub pos: Pos,
+        pub inner_map: Array2<PosKind>,
+        pub edges: BTreeMap<Dir, Pos>,
+    }
+
+    impl Face {
+        pub fn new(pos: Pos, inner_map: Array2<PosKind>) -> Self {
+            Face {
+                pos,
+                inner_map,
+                edges: BTreeMap::new(),
+            }
+        }
+    }
+
+    /// Fold the cube such that all the faces know the face cordinate in the 4x4 grid of their edges.
+    pub fn fold_cube(faces: &mut Vec<Face>) {
+        let faces_c = faces.clone();
+        // Wrap the 4x4 face grid
+        let wrapping_add = |this: Pos, other: Pos| {
+            let a = this + other;
+            Pos::from([a[0].rem_euclid(4), a[1].rem_euclid(4)])
+        };
+        // Fill in edges that exist explicitly in the input.
+        for face in &mut faces.iter_mut() {
+            if let Some(n) = faces_c
+                .iter()
+                .find(|x| x.pos == wrapping_add(face.pos, [-1, 0].into()))
+            {
+                face.edges.insert(Dir::Left, n.pos);
+            }
+            if let Some(n) = faces_c
+                .iter()
+                .find(|x| x.pos == wrapping_add(face.pos, [1, 0].into()))
+            {
+                face.edges.insert(Dir::Right, n.pos);
+            }
+            if let Some(n) = faces_c
+                .iter()
+                .find(|x| x.pos == wrapping_add(face.pos, [0, -1].into()))
+            {
+                face.edges.insert(Dir::Up, n.pos);
+            }
+            if let Some(n) = faces_c
+                .iter()
+                .find(|x| x.pos == wrapping_add(face.pos, [0, 1].into()))
+            {
+                face.edges.insert(Dir::Down, n.pos);
+            }
+        }
+        // Fill in the rest by noting that if a face has two connections in an L shape then the two ends of the L also meet when folded.
+        // Ex. |a|
+        //     |b||c|
+        // Then a's right side is c's top side. (a's bottom side rotated left touches c's left side rotated right)
+        loop {
+            for b in faces.clone() {
+                for edge_ba in b.edges.clone() {
+                    for edge_bc in b.edges.clone() {
+                        // If L shape
+                        if edge_ba.0.rotate(&Rotation::Right) == edge_bc.0 {
+                            if let Some(a) = faces.iter().find(|x| x.pos == edge_ba.1).cloned() {
+                                if let Some(c) = faces.iter().find(|x| x.pos == edge_bc.1).cloned()
+                                {
+                                    let edge_ab = a
+                                        .edges
+                                        .iter()
+                                        .find(|x| *x.1 == b.pos)
+                                        .expect("Connected already");
+                                    let edge_cb = c
+                                        .edges
+                                        .iter()
+                                        .find(|x| *x.1 == b.pos)
+                                        .expect("Connected already");
+                                    if let Some(a) = faces.iter_mut().find(|x| x.pos == edge_ba.1) {
+                                        a.edges.insert(edge_ab.0.rotate(&Rotation::Left), c.pos);
+                                    }
+                                    if let Some(c) = faces.iter_mut().find(|x| x.pos == edge_bc.1) {
+                                        c.edges.insert(edge_cb.0.rotate(&Rotation::Right), a.pos);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if faces.iter().map(|x| x.edges.len()).sum::<usize>() == 6 * 4 {
+                break;
+            }
+        }
     }
 }
 
@@ -224,7 +343,7 @@ mod parse {
 mod part1 {
     use super::*;
     use crate::{
-        data::{rotate, DirVal, Facing, Pos, PosKind, Val},
+        data::{rotate, Facing, Pos, PosKind, Val, VelocityVal},
         parse::parse_input,
     };
     use advent_lib::parse::read_and_leak;
@@ -234,7 +353,7 @@ mod part1 {
         let (map, moves) = parse_input(input)?;
         let extents = Pos::extents_iter(map.iter().map(|x| *x.0)).expect("Nonempty iter");
         let mut facing = Facing::from_map_start(&map);
-        let next_pos = |facing: &Facing, distance: DirVal| {
+        let next_pos = |facing: &Facing, distance: VelocityVal| {
             let mut new_pos = facing.pos.clone();
             // Keep moving in that direction until done.
             for _ in 0..distance {
@@ -274,9 +393,64 @@ mod part1 {
     }
 }
 
+mod part2 {
+    use super::*;
+    use crate::{
+        data::{fold_cube, Face, Pos, Val},
+        parse::parse_input,
+    };
+    use advent_lib::{cord::NDCord, iters::NDCartesianProduct, parse::read_and_leak};
+    use ndarray::Array2;
+    use std::collections::BTreeMap;
+
+    pub fn run(file_name: &str) -> Result<Val, Box<dyn Error>> {
+        let input = read_and_leak(file_name)?;
+        let (map, moves) = parse_input(input)?;
+        let extents = Pos::extents_iter(map.iter().map(|x| *x.0)).expect("Nonempty iter");
+        let map_sidelength = ((map.len() / 6) as f64).sqrt() as Val;
+        let mut faces_unordered = BTreeMap::new();
+        // Iterator over all possible face locations. A cube can't be more than 4 faces long when flattened.
+        // Longest unfolded cube is
+        /*
+          |x|      0.
+        |x|x|x|    1.
+          |x|      2.
+          |x|      3.
+         */
+        let it = (0..4).into_iter().map(|x| x * map_sidelength);
+        // Find all the faces that exist and where they exist using a cordinate system for just their potential locations (4x4 grid).
+        for top_left in NDCartesianProduct::new([it.clone(), it.clone()]).map(NDCord) {
+            if map.get(&top_left).is_some() {
+                let bottom_right = top_left + Pos::from([map_sidelength - 1, map_sidelength - 1]);
+                let inner_map = Array2::from_shape_vec(
+                    (map_sidelength as usize, map_sidelength as usize),
+                    top_left
+                        .interpolate(&bottom_right)
+                        .map(|x| map[&x])
+                        .collect(),
+                )?;
+                faces_unordered.insert(top_left / map_sidelength, inner_map);
+            }
+        }
+        let mut faces: Vec<Face> = faces_unordered
+            .into_iter()
+            .map(|(pos, inner_map)| Face::new(pos, inner_map))
+            .collect();
+        faces.iter().for_each(|x| {
+            advent_lib::dbc!(&x.edges);
+        });
+        fold_cube(&mut faces);
+        faces.iter().for_each(|x| {
+            advent_lib::dbc!(x.pos, &x.edges);
+        });
+        // Ok(1000 * (facing.pos[1] + 1) + 4 * (facing.pos[0] + 1) + direction_points)
+        todo!()
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Part 1 answer: {:#?}", part1::run("input.txt")?);
-    // println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
+    println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
     Ok(())
 }
 
@@ -297,11 +471,11 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn test_part2() -> Result<(), Box<dyn Error>> {
-    //     assert_eq!((part2::run("inputtest.txt")? as u64), 301);
-    //     Ok(())
-    // }
+    #[test]
+    fn test_part2() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part2::run("inputtest.txt")?, 5031);
+        Ok(())
+    }
 
     // #[test]
     // fn part2_ans() -> Result<(), Box<dyn Error>> {
