@@ -99,21 +99,41 @@ mod data {
     }
 
     #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-    pub struct Facing {
+    pub struct Cursor {
         pub pos: Pos,
         pub dir: Velocity,
+        pub face: Pos,
     }
 
-    impl Facing {
-        pub fn from_map_start(map: &Map) -> Self {
-            Facing {
-                pos: *map
-                    .iter()
-                    .find(|(pos, &x)| pos[1] == 0 && x == PosKind::Open) // This works because Btree is ordered
-                    .expect("Starting position")
-                    .0,
+    impl Cursor {
+        pub fn from_map_start1(map: &Map) -> Self {
+            let pos = *map
+                .iter()
+                .find(|(pos, &x)| pos[1] == 0 && x == PosKind::Open) // This works because Btree is ordered
+                .expect("Starting position")
+                .0;
+            Cursor {
+                pos,
                 dir: Velocity::from([1, 0]),
+                face: [0, 0].into(),
             }
+        }
+        pub fn from_map_start2(map: &Map, map_sidelength: isize) -> Self {
+            let absolute_pos = *map
+                .iter()
+                .find(|(pos, &x)| pos[1] == 0 && x == PosKind::Open) // This works because Btree is ordered
+                .expect("Starting position")
+                .0;
+            Cursor {
+                pos: [0, 0].into(),
+                dir: Velocity::from([1, 0]),
+                face: absolute_pos / map_sidelength,
+            }
+        }
+
+        pub fn to_global_pos(&self, map_side_len: isize) -> Pos {
+            let origin = self.face * map_side_len;
+            origin + self.pos
         }
     }
 
@@ -127,10 +147,10 @@ mod data {
         }
     }
 
-    impl Facing {
-        pub fn mov(&mut self, mov: Move, next_pos: impl Fn(&Facing, VelocityVal) -> Pos) {
+    impl Cursor {
+        pub fn mov(&mut self, mov: Move, next_cursor: impl Fn(&Cursor, VelocityVal) -> Cursor) {
             match mov {
-                Move::Forward(distance) => self.pos = next_pos(&self, distance),
+                Move::Forward(distance) => *self = next_cursor(&self, distance),
                 Move::Rotate(rotation) => rotate(&mut self.dir, &rotation),
             }
         }
@@ -192,6 +212,26 @@ mod data {
                     Self::from_i8((self.to_i8().unwrap() + 1).rem_euclid(4)).unwrap()
                 }
                 Rotation::Left => Self::from_i8((self.to_i8().unwrap() - 1).rem_euclid(4)).unwrap(),
+            }
+        }
+
+        pub fn to_velocity(self) -> Velocity {
+            match self {
+                Dir::Right => [1, 0],
+                Dir::Down => [0, 1],
+                Dir::Left => [-1, 0],
+                Dir::Up => [0, -1],
+            }
+            .into()
+        }
+
+        pub fn from_velocity(velocity: Velocity) -> Self {
+            match velocity.0 {
+                [1, 0] => Dir::Right,
+                [-1, 0] => Dir::Left,
+                [0, 1] => Dir::Down,
+                [0, -1] => Dir::Up,
+                _ => unreachable!("Invalid velocity"),
             }
         }
     }
@@ -343,7 +383,7 @@ mod parse {
 mod part1 {
     use super::*;
     use crate::{
-        data::{rotate, Facing, Pos, PosKind, Val, VelocityVal},
+        data::{Cursor, Dir, Pos, PosKind, Val, VelocityVal},
         parse::parse_input,
     };
     use advent_lib::parse::read_and_leak;
@@ -352,12 +392,12 @@ mod part1 {
         let input = read_and_leak(file_name)?;
         let (map, moves) = parse_input(input)?;
         let extents = Pos::extents_iter(map.iter().map(|x| *x.0)).expect("Nonempty iter");
-        let mut facing = Facing::from_map_start(&map);
-        let next_pos = |facing: &Facing, distance: VelocityVal| {
-            let mut new_pos = facing.pos.clone();
+        let mut cursor = Cursor::from_map_start1(&map);
+        let next_pos = |cursor: &Cursor, distance: VelocityVal| {
+            let mut new_pos = cursor.pos.clone();
             // Keep moving in that direction until done.
             for _ in 0..distance {
-                let mut next_pos = new_pos + facing.dir;
+                let mut next_pos = new_pos + cursor.dir;
                 new_pos = loop {
                     match map.get(&next_pos) {
                         // Don't change position if will hit a wall.
@@ -369,7 +409,7 @@ mod part1 {
                         }
                         // Loop around if the map doesn't include that position.
                         None => {
-                            let a = next_pos + facing.dir;
+                            let a = next_pos + cursor.dir;
                             next_pos = Pos::from([
                                 a[0].rem_euclid(extents.1[0]),
                                 a[1].rem_euclid(extents.1[1]),
@@ -378,36 +418,35 @@ mod part1 {
                     }
                 };
             }
-            new_pos
+            Cursor {
+                pos: new_pos,
+                dir: cursor.dir,
+                face: [0, 0].into(),
+            }
         };
         for mov in moves {
-            facing.mov(mov, next_pos);
+            cursor.mov(mov, next_pos);
         }
-        let mut direction_points = 0;
-        // Points for direction correspond to number of left rotations to align to the right direction.
-        while facing.dir != [1, 0].into() {
-            rotate(&mut facing.dir, &data::Rotation::Left);
-            direction_points += 1;
-        }
-        Ok(1000 * (facing.pos[1] + 1) + 4 * (facing.pos[0] + 1) + direction_points)
+        Ok(1000 * (cursor.pos[1] + 1)
+            + 4 * (cursor.pos[0] + 1)
+            + Dir::from_velocity(cursor.dir) as isize)
     }
 }
 
 mod part2 {
     use super::*;
     use crate::{
-        data::{fold_cube, Face, Pos, Val},
+        data::{fold_cube, log_state, Cursor, Dir, Face, Map, Pos, PosKind, Val, VelocityVal},
         parse::parse_input,
     };
     use advent_lib::{cord::NDCord, iters::NDCartesianProduct, parse::read_and_leak};
     use ndarray::Array2;
     use std::collections::BTreeMap;
 
-    pub fn run(file_name: &str) -> Result<Val, Box<dyn Error>> {
-        let input = read_and_leak(file_name)?;
-        let (map, moves) = parse_input(input)?;
-        let extents = Pos::extents_iter(map.iter().map(|x| *x.0)).expect("Nonempty iter");
-        let map_sidelength = ((map.len() / 6) as f64).sqrt() as Val;
+    fn folded_cube(
+        map_sidelength: isize,
+        map: &Map,
+    ) -> Result<Vec<Face>, Box<(dyn std::error::Error + 'static)>> {
         let mut faces_unordered = BTreeMap::new();
         // Iterator over all possible face locations. A cube can't be more than 4 faces long when flattened.
         // Longest unfolded cube is
@@ -436,15 +475,141 @@ mod part2 {
             .into_iter()
             .map(|(pos, inner_map)| Face::new(pos, inner_map))
             .collect();
-        faces.iter().for_each(|x| {
-            advent_lib::dbc!(&x.edges);
-        });
         fold_cube(&mut faces);
-        faces.iter().for_each(|x| {
-            advent_lib::dbc!(x.pos, &x.edges);
-        });
-        // Ok(1000 * (facing.pos[1] + 1) + 4 * (facing.pos[0] + 1) + direction_points)
-        todo!()
+        Ok(faces)
+    }
+
+    fn change_face(cursor: &Cursor, faces: &Vec<Face>, map_side_len: isize) -> Cursor {
+        let from = faces.iter().find(|x| x.pos == cursor.face).unwrap();
+        let to_face = |dir| faces.iter().find(|x| x.pos == from.edges[dir]).unwrap();
+        let with_dir = |to_face: &Face| {
+            to_face
+                .edges
+                .iter()
+                .find_map(|(dir, &face)| if face == from.pos { Some(dir) } else { None })
+                .cloned()
+                .unwrap()
+        };
+        let inner = |pos, to_face: &Face, dir_to: Dir| Cursor {
+            pos,
+            dir: dir_to.to_velocity() * -1,
+            face: to_face.pos,
+        };
+
+        match Dir::from_velocity(cursor.dir) {
+            d_from @ Dir::Right => {
+                let to_face = to_face(&d_from);
+                let with_dir = with_dir(to_face);
+                match with_dir {
+                    d @ Dir::Right => inner([map_side_len - 1, cursor.pos[1]].into(), to_face, d),
+                    d @ Dir::Down => inner(
+                        [map_side_len - 1 - cursor.pos[1], map_side_len - 1].into(),
+                        to_face,
+                        d,
+                    ),
+                    d @ Dir::Left => inner([0, cursor.pos[1]].into(), to_face, d),
+                    d @ Dir::Up => inner([map_side_len - 1 - cursor.pos[1], 0].into(), to_face, d),
+                }
+            }
+            d_from @ Dir::Left => {
+                let to_face = to_face(&d_from);
+                let with_dir = with_dir(to_face);
+                match with_dir {
+                    d @ Dir::Right => inner([map_side_len - 1, cursor.pos[1]].into(), to_face, d),
+                    d @ Dir::Down => inner([cursor.pos[1], map_side_len - 1].into(), to_face, d),
+                    d @ Dir::Left => inner([0, cursor.pos[1]].into(), to_face, d),
+                    d @ Dir::Up => inner([map_side_len - cursor.pos[1] - 1, 0].into(), to_face, d),
+                }
+            }
+
+            d_from @ Dir::Down => {
+                let to_face = to_face(&d_from);
+                let with_dir = with_dir(to_face);
+                // Convert global to local
+                match with_dir {
+                    d @ Dir::Right => inner(
+                        [map_side_len - 1, map_side_len - cursor.pos[1] - 1].into(),
+                        to_face,
+                        d,
+                    ),
+                    d @ Dir::Down => inner(
+                        [map_side_len - 1 - cursor.pos[0], map_side_len - 1].into(),
+                        to_face,
+                        d,
+                    ),
+                    d @ Dir::Left => inner([0, cursor.pos[0]].into(), to_face, d),
+                    d @ Dir::Up => inner([cursor.pos[0], 0].into(), to_face, d),
+                }
+            }
+            d_from @ Dir::Up => {
+                let to_face = to_face(&d_from);
+                let with_dir = with_dir(to_face);
+                // Convert global to local
+                match with_dir {
+                    d @ Dir::Right => inner([map_side_len - 1, cursor.pos[0]].into(), to_face, d),
+                    d @ Dir::Down => inner([cursor.pos[0], map_side_len - 1].into(), to_face, d),
+                    d @ Dir::Left => inner([0, cursor.pos[0]].into(), to_face, d),
+                    d @ Dir::Up => inner([map_side_len - 1 - cursor.pos[0], 0].into(), to_face, d),
+                }
+            }
+        }
+    }
+
+    pub fn run(file_name: &str) -> Result<Val, Box<dyn Error>> {
+        let input = read_and_leak(file_name)?;
+        let (map, moves) = parse_input(input)?;
+        let extents = Pos::extents_iter(map.iter().map(|x| *x.0)).expect("Nonempty iter");
+        let map_side_len = ((map.len() / 6) as f64).sqrt() as Val;
+        let faces = folded_cube(map_side_len, &map)?;
+        // Global position.
+        let mut cursor = Cursor::from_map_start2(&map, map_side_len);
+        let backtrace = std::cell::RefCell::new(std::collections::HashMap::new());
+        let next_cursor = |cursor: &Cursor, distance: VelocityVal| {
+            let mut new_cursor = cursor.clone();
+            // Keep moving in that direction until done.
+            for _ in 0..distance {
+                let mut next_cursor = Cursor {
+                    pos: new_cursor.pos + new_cursor.dir,
+                    ..new_cursor.clone()
+                };
+                new_cursor = loop {
+                    match faces
+                        .iter()
+                        .find(|x| x.pos == next_cursor.face)
+                        .unwrap()
+                        .inner_map
+                        .get(next_cursor.pos.map(|x| x as usize))
+                    {
+                        // Don't change position if will hit a wall.
+                        Some(&PosKind::Wall) => break new_cursor,
+                        // Change position if won't hit a wall.
+                        Some(&PosKind::Open) => break next_cursor,
+                        // Wrap when leaving a face
+                        None => {
+                            next_cursor = change_face(&cursor, &faces, map_side_len);
+                        }
+                    }
+                };
+                backtrace.borrow_mut().insert(
+                    new_cursor.to_global_pos(map_side_len),
+                    new_cursor.dir.clone(),
+                );
+                log_state(
+                    std::path::Path::new("out.txt"),
+                    &extents,
+                    &map,
+                    &backtrace.clone().into_inner(),
+                )
+                .unwrap();
+            }
+            new_cursor
+        };
+        for mov in moves {
+            cursor.mov(mov, &next_cursor);
+        }
+        Ok(1000 * (cursor.to_global_pos(map_side_len)[1] + 1)
+            + 4 * (cursor.to_global_pos(map_side_len)[0] + 1)
+            + Dir::from_velocity(cursor.dir) as Val)
     }
 }
 
