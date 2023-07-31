@@ -436,7 +436,7 @@ mod part1 {
 mod part2 {
     use super::*;
     use crate::{
-        data::{fold_cube, log_state, Cursor, Dir, Face, Map, Pos, PosKind, Val, VelocityVal},
+        data::{fold_cube, Cursor, Dir, Face, Map, Pos, PosKind, Val, VelocityVal},
         parse::parse_input,
     };
     use advent_lib::{cord::NDCord, iters::NDCartesianProduct, parse::read_and_leak};
@@ -480,90 +480,64 @@ mod part2 {
     }
 
     fn change_face(cursor: &Cursor, faces: &Vec<Face>, map_side_len: isize) -> Cursor {
-        let from = faces.iter().find(|x| x.pos == cursor.face).unwrap();
-        let to_face = |dir| faces.iter().find(|x| x.pos == from.edges[dir]).unwrap();
-        let with_dir = |to_face: &Face| {
-            to_face
-                .edges
-                .iter()
-                .find_map(|(dir, &face)| if face == from.pos { Some(dir) } else { None })
-                .cloned()
-                .unwrap()
+        let face_from = faces.iter().find(|x| x.pos == cursor.face).unwrap();
+        let dir_from = Dir::from_velocity(cursor.dir);
+        let face_to = faces
+            .iter()
+            .find(|x| x.pos == face_from.edges[&dir_from])
+            .unwrap();
+        let dir_to = *face_to
+            .edges
+            .iter()
+            .find_map(|(dir, &face)| {
+                if face == face_from.pos {
+                    Some(dir)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        // Do what probably amounts to a matrix multiplication by a rotation matrix.
+        let mut rotated_axis = if dir_from == dir_to {
+            [
+                map_side_len - 1 - cursor.pos[0],
+                map_side_len - 1 - cursor.pos[1],
+            ]
+            .into()
+        } else if dir_from.rotate(&data::Rotation::Right) == dir_to {
+            [cursor.pos[1], map_side_len - 1 - cursor.pos[0]].into()
+        } else if dir_from
+            .rotate(&data::Rotation::Right)
+            .rotate(&data::Rotation::Right)
+            == dir_to
+        {
+            cursor.pos
+        } else if dir_from.rotate(&data::Rotation::Left) == dir_to {
+            [map_side_len - 1 - cursor.pos[1], cursor.pos[0]].into()
+        } else {
+            unreachable!()
         };
-        let inner = |pos, to_face: &Face, dir_to: Dir| Cursor {
-            pos,
-            dir: dir_to.to_velocity() * -1,
-            face: to_face.pos,
-        };
-
-        match Dir::from_velocity(cursor.dir) {
-            d_from @ Dir::Right => {
-                let to_face = to_face(&d_from);
-                let with_dir = with_dir(to_face);
-                match with_dir {
-                    d @ Dir::Right => inner([map_side_len - 1, cursor.pos[1]].into(), to_face, d),
-                    d @ Dir::Down => inner(
-                        [map_side_len - 1 - cursor.pos[1], map_side_len - 1].into(),
-                        to_face,
-                        d,
-                    ),
-                    d @ Dir::Left => inner([0, cursor.pos[1]].into(), to_face, d),
-                    d @ Dir::Up => inner([map_side_len - 1 - cursor.pos[1], 0].into(), to_face, d),
-                }
-            }
-            d_from @ Dir::Left => {
-                let to_face = to_face(&d_from);
-                let with_dir = with_dir(to_face);
-                match with_dir {
-                    d @ Dir::Right => inner([map_side_len - 1, cursor.pos[1]].into(), to_face, d),
-                    d @ Dir::Down => inner([cursor.pos[1], map_side_len - 1].into(), to_face, d),
-                    d @ Dir::Left => inner([0, cursor.pos[1]].into(), to_face, d),
-                    d @ Dir::Up => inner([map_side_len - cursor.pos[1] - 1, 0].into(), to_face, d),
-                }
-            }
-
-            d_from @ Dir::Down => {
-                let to_face = to_face(&d_from);
-                let with_dir = with_dir(to_face);
-                // Convert global to local
-                match with_dir {
-                    d @ Dir::Right => inner(
-                        [map_side_len - 1, map_side_len - cursor.pos[1] - 1].into(),
-                        to_face,
-                        d,
-                    ),
-                    d @ Dir::Down => inner(
-                        [map_side_len - 1 - cursor.pos[0], map_side_len - 1].into(),
-                        to_face,
-                        d,
-                    ),
-                    d @ Dir::Left => inner([0, cursor.pos[0]].into(), to_face, d),
-                    d @ Dir::Up => inner([cursor.pos[0], 0].into(), to_face, d),
-                }
-            }
-            d_from @ Dir::Up => {
-                let to_face = to_face(&d_from);
-                let with_dir = with_dir(to_face);
-                // Convert global to local
-                match with_dir {
-                    d @ Dir::Right => inner([map_side_len - 1, cursor.pos[0]].into(), to_face, d),
-                    d @ Dir::Down => inner([cursor.pos[0], map_side_len - 1].into(), to_face, d),
-                    d @ Dir::Left => inner([0, cursor.pos[0]].into(), to_face, d),
-                    d @ Dir::Up => inner([map_side_len - 1 - cursor.pos[0], 0].into(), to_face, d),
-                }
-            }
+        // Fix the inner absolute position based on which side its entering the face from.
+        match dir_to {
+            Dir::Right => rotated_axis[0] = map_side_len - 1,
+            Dir::Down => rotated_axis[1] = map_side_len - 1,
+            Dir::Left => rotated_axis[0] = 0,
+            Dir::Up => rotated_axis[1] = 0,
+        }
+        Cursor {
+            pos: rotated_axis,
+            dir: dir_to.to_velocity() * -1, // turn to leave the edge used to enter the face_to
+            face: face_to.pos,
         }
     }
 
     pub fn run(file_name: &str) -> Result<Val, Box<dyn Error>> {
         let input = read_and_leak(file_name)?;
         let (map, moves) = parse_input(input)?;
-        let extents = Pos::extents_iter(map.iter().map(|x| *x.0)).expect("Nonempty iter");
         let map_side_len = ((map.len() / 6) as f64).sqrt() as Val;
         let faces = folded_cube(map_side_len, &map)?;
         // Global position.
         let mut cursor = Cursor::from_map_start2(&map, map_side_len);
-        let backtrace = std::cell::RefCell::new(std::collections::HashMap::new());
         let next_cursor = |cursor: &Cursor, distance: VelocityVal| {
             let mut new_cursor = cursor.clone();
             // Keep moving in that direction until done.
@@ -590,17 +564,6 @@ mod part2 {
                         }
                     }
                 };
-                backtrace.borrow_mut().insert(
-                    new_cursor.to_global_pos(map_side_len),
-                    new_cursor.dir.clone(),
-                );
-                log_state(
-                    std::path::Path::new("out.txt"),
-                    &extents,
-                    &map,
-                    &backtrace.clone().into_inner(),
-                )
-                .unwrap();
             }
             new_cursor
         };
@@ -642,10 +605,9 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn part2_ans() -> Result<(), Box<dyn Error>> {
-    //     assert!((part2::run("input.txt")? as u64) < 3555057453232);
-    //     assert_eq!((part2::run("input.txt")? as u64), 3555057453229);
-    //     Ok(())
-    // }
+    #[test]
+    fn part2_ans() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part2::run("input.txt")?, 129339);
+        Ok(())
+    }
 }
