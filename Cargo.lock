@@ -140,6 +140,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "advent_23"
+version = "0.1.0"
+dependencies = [
+ "advent_lib",
+ "enum-iterator",
+ "yap",
+]
+
+[[package]]
 name = "advent_3"
 version = "0.1.0"
 

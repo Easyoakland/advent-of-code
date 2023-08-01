@@ -100,11 +100,7 @@ pub mod yap {
         T: IntoIterator + Clone,
         <T as IntoIterator>::Item: Borrow<<Input as Tokens>::Item>,
     {
-        if input.tokens(tag.clone()) {
-            Some(tag)
-        } else {
-            None
-        }
+        input.tokens(tag.clone()).then(|| tag)
     }
 
     /// Use [`str::parse`] to parse some amount of input after taking some input as dictated by a function.
