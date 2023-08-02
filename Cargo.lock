@@ -198,6 +198,7 @@ dependencies = [
  "derive_more",
  "itertools",
  "nom",
+ "num-derive",
  "num-iter",
  "num-traits",
  "thiserror",
