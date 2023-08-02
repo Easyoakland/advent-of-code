@@ -335,7 +335,7 @@ mod data {
 
 mod parse {
     use crate::data::{Map, Move, PosKind};
-    use advent_lib::parse::yap::{all_consuming, ParseError};
+    use advent_lib::parse::yap::{all_consuming, AllConsuming};
     use std::collections::BTreeMap;
     use yap::{types::StrTokens, IntoTokens, Tokens};
 
@@ -375,7 +375,7 @@ mod parse {
         out
     }
 
-    pub fn parse_input(input: &str) -> Result<(Map, Vec<Move>), ParseError<char>> {
+    pub fn parse_input(input: &str) -> Result<(Map, Vec<Move>), AllConsuming<String>> {
         all_consuming(&mut input.into_tokens(), |t| (map(t), moves(t)))
     }
 }

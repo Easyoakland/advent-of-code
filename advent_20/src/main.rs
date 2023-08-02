@@ -1,11 +1,11 @@
 use std::error::Error;
 
 mod parse {
-    use advent_lib::parse::yap::{all_consuming, line_ending, signed_digit1, ParseError};
+    use advent_lib::parse::yap::{all_consuming, line_ending, signed_digit1, AllConsuming};
     use yap::{IntoTokens, Tokens};
     type Cord = isize;
 
-    pub fn parse_input(input: &str) -> Result<Vec<Cord>, ParseError<char>> {
+    pub fn parse_input(input: &str) -> Result<Vec<Cord>, AllConsuming<String>> {
         all_consuming(&mut input.into_tokens(), |t| {
             let res = t
                 .sep_by(signed_digit1, |t| line_ending(t).is_some())

@@ -103,7 +103,7 @@ pub mod yap {
         input.tokens(tag.clone()).then(|| tag)
     }
 
-    /// Use [`str::parse`] to parse some amount of input after taking some input as dictated by a function.
+    /// Use [`str::parse`] to parse some amount of input after taking some input matching a predicate.
     pub fn parse_from1<I, O, F>(
         input: &mut I,
         take_while: F,
@@ -114,11 +114,7 @@ pub mod yap {
         F: FnMut(&I::Item) -> bool,
     {
         let to_parse = input.tokens_while(take_while).collect::<String>();
-        if to_parse.is_empty() {
-            None
-        } else {
-            Some(to_parse.parse::<O>())
-        }
+        (!to_parse.is_empty()).then(|| to_parse.parse::<O>())
     }
 
     /// Parses at least 1 digit.
@@ -160,30 +156,40 @@ pub mod yap {
         )
     }
 
-    #[derive(Debug, thiserror::Error)]
-    pub enum ParseError<Item> {
-        #[error("Input wasn't fully consumed. Remainder: {0:?}")]
-        AllConsuming(Vec<Item>),
+    /// Checks that next input is [`None`].
+    pub fn eof(tokens: &mut impl Tokens) -> bool {
+        let loc = tokens.location();
+        // Check nothing comes after
+        match tokens.next() {
+            None => true,
+            Some(_) => {
+                tokens.set_location(loc);
+                false
+            }
+        }
     }
 
-    /// Attempts to parse all remainder of input until next None. Consumes nothing on fail.
-    pub fn all_consuming<'a, I, O, F>(input: &'a mut I, parser: F) -> Result<O, ParseError<I::Item>>
+    /// Error when input wasn't fully consumed.
+    #[derive(Debug, thiserror::Error)]
+    #[error("Input wasn't fully consumed. Failed at offset {0:?} with remainder: {1:?}")]
+    pub struct AllConsuming<E>(usize, E);
+
+    /// Attempts to parse all remainder of input until next [`None`]. Consumes nothing on fail.
+    pub fn all_consuming<'a, I, O, E, F>(input: &'a mut I, parser: F) -> Result<O, AllConsuming<E>>
     where
         I: Tokens,
         F: FnOnce(&mut I) -> O + 'a,
+        E: FromIterator<I::Item>,
     {
         let before_consuming = input.location();
         let res = parser(input);
         // Check nothing comes after
-        match input.next() {
-            None => Ok(res),
-            Some(x) => {
-                let res = Err(ParseError::AllConsuming(
-                    std::iter::once(x).chain(input.as_iter()).collect(),
-                ));
-                input.set_location(before_consuming);
-                res
-            }
+        if eof(input) {
+            Ok(res)
+        } else {
+            let err = AllConsuming(input.offset(), input.as_iter().collect());
+            input.set_location(before_consuming);
+            Err(err)
         }
     }
 }

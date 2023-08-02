@@ -4,7 +4,7 @@ use num_iter::range_inclusive;
 use num_traits::{cast, PrimInt, Zero};
 use std::{
     array,
-    fmt::Debug,
+    fmt::{Debug, Display},
     iter::Sum,
     num::NonZeroUsize,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
@@ -27,6 +27,21 @@ impl<T: PrimInt + Sum + 'static> CordData for T {}
 /// Capable of things like neighborhood calculation, cordinate addition, interpolation, etc...
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deref, DerefMut)]
 pub struct NDCord<T, const DIM: usize>(pub [T; DIM]);
+
+impl<T: Display, const DIM: usize> Display for NDCord<T, DIM> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[")?;
+        if self.len() > 0 {
+            for e in &self.0[..self.0.len() - 1] {
+                write!(f, "{}, ", e)?;
+            }
+            {
+                write!(f, "{}", self.last().unwrap())?;
+            }
+        }
+        write!(f, "]")
+    }
+}
 
 impl<T: Default + Copy, const DIM: usize> Default for NDCord<T, DIM> {
     fn default() -> Self {

@@ -1,5 +1,5 @@
 use crate::data::{Blueprint, Resource};
-use advent_lib::parse::yap::{all_consuming, digit1, line_ending, tag, ParseError};
+use advent_lib::parse::yap::{all_consuming, digit1, line_ending, tag, AllConsuming};
 use yap::{one_of, types::StrTokens, IntoTokens, Tokens};
 
 pub fn sub_resource(input: &mut StrTokens, subresource: &str) -> Option<u8> {
@@ -62,7 +62,7 @@ pub fn blueprint(input: &mut StrTokens) -> Option<Blueprint> {
     })
 }
 
-pub fn parse_input(input: &str) -> Result<Vec<Blueprint>, ParseError<char>> {
+pub fn parse_input(input: &str) -> Result<Vec<Blueprint>, AllConsuming<String>> {
     all_consuming(&mut input.into_tokens(), |t| {
         let res = t
             .sep_by(blueprint, |t| line_ending(t).is_some())
