@@ -4,12 +4,9 @@ mod data {
     use advent_lib::{cord::NDCord, dir::Dir};
     use ndarray::{Array2, Axis};
     use std::{
-        cell::RefCell,
-        collections::HashMap,
         fmt::{Debug, Display},
         hash::Hash,
         iter,
-        rc::Rc,
     };
     pub type Map = Array2<Cell>;
     pub type Val = isize;
@@ -49,23 +46,6 @@ mod data {
         Dir(Dir),
     }
 
-    /// Iterator of Map state over time.
-    #[derive(Clone, Debug)]
-    pub struct ChronoMap {
-        map: Map,
-        // Map of all transitions already computed. Clones share a cache to avoid duplicate work.
-        cache: Rc<RefCell<HashMap<Map, Map>>>,
-    }
-
-    impl ChronoMap {
-        pub fn new(map: Map) -> Self {
-            Self {
-                map,
-                cache: Rc::new(RefCell::new(HashMap::new())),
-            }
-        }
-    }
-
     /// Knows how to format a map. Clunky way to get a function that formats with these args.
     pub struct DisplayMap<'a> {
         pub map: &'a Map,
@@ -91,89 +71,61 @@ mod data {
         }
     }
 
-    impl Display for ChronoMap {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            DisplayMap {
-                map: &self.map,
-                // Don't render elf
-                elf: &[-1, -1].into(),
-            }
-            .fmt(f)
-        }
-    }
+    pub fn next_map(map: &Map) -> Map {
+        // Save wall positions but replace blizzards with floor so only the new positions remain after the following mutation.
+        let mut new_map = Array2::from_shape_vec(
+            map.dim(),
+            map.iter()
+                .map(|x| match x {
+                    Cell::Wall => Cell::Wall,
+                    Cell::Floor | Cell::Blizzards(_) => Cell::Floor,
+                })
+                .collect(),
+        )
+        .expect("Valid shape");
 
-    impl Iterator for ChronoMap {
-        type Item = Map;
-
-        fn size_hint(&self) -> (usize, Option<usize>) {
-            (usize::MAX, None)
-        }
-
-        fn next(&mut self) -> Option<Self::Item> {
-            // Check cache first
-            if let Some(next) = self.cache.borrow().get(&self.map) {
-                self.map = next.clone();
-                return Some(next.clone());
-            }
-
-            // Save wall positions but replace blizzards with floor so only the new positions remain after the following mutation.
-            let mut new_map = Array2::from_shape_vec(
-                self.map.dim(),
-                self.map
-                    .iter()
-                    .map(|x| match x {
-                        Cell::Wall => Cell::Wall,
-                        Cell::Floor | Cell::Blizzards(_) => Cell::Floor,
-                    })
-                    .collect(),
-            )
-            .expect("Valid shape");
-            // Move all blizzards to their new positions in the new_map.
-            for (idx, cell) in self.map.indexed_iter() {
-                if let Cell::Blizzards(blizzards) = cell {
-                    for blizzard in blizzards {
-                        let mut wrap_dest = None;
-                        if let Some(to_cell) = new_map.get_mut(
-                            (blizzard.to_velocity()
-                                + [
-                                    isize::try_from(idx.0).unwrap(),
-                                    isize::try_from(idx.1).unwrap(),
-                                ]
-                                .into())
-                            .0
-                            .map(|x| usize::try_from(x).unwrap()),
-                        ) {
-                            match to_cell {
-                                Cell::Wall => {
-                                    // Save where the blizzard is going to wrap at for later.
-                                    wrap_dest = match blizzard {
-                                        Dir::Right => Some([1, idx.1]),
-                                        Dir::Down => Some([idx.0, 1]),
-                                        Dir::Left => Some([self.map.dim().0 - 2, idx.1]),
-                                        Dir::Up => Some([idx.0, self.map.dim().1 - 2]),
-                                    }
+        // Move all blizzards to their new positions in the new_map.
+        for (idx, cell) in map.indexed_iter() {
+            if let Cell::Blizzards(blizzards) = cell {
+                for blizzard in blizzards {
+                    let mut wrap_dest = None;
+                    if let Some(to_cell) = new_map.get_mut(
+                        (blizzard.to_velocity()
+                            + [
+                                isize::try_from(idx.0).unwrap(),
+                                isize::try_from(idx.1).unwrap(),
+                            ]
+                            .into())
+                        .0
+                        .map(|x| usize::try_from(x).unwrap()),
+                    ) {
+                        match to_cell {
+                            Cell::Wall => {
+                                // Save where the blizzard is going to wrap at for later.
+                                wrap_dest = match blizzard {
+                                    Dir::Right => Some([1, idx.1]),
+                                    Dir::Down => Some([idx.0, 1]),
+                                    Dir::Left => Some([map.dim().0 - 2, idx.1]),
+                                    Dir::Up => Some([idx.0, map.dim().1 - 2]),
                                 }
-                                x @ Cell::Floor => *x = Cell::Blizzards(vec![*blizzard]),
-                                Cell::Blizzards(b) => b.push(*blizzard),
                             }
+                            x @ Cell::Floor => *x = Cell::Blizzards(vec![*blizzard]),
+                            Cell::Blizzards(b) => b.push(*blizzard),
                         }
-                        // Handle the wall case
-                        if let Some(wrap_dest) = wrap_dest {
-                            match &mut new_map[wrap_dest] {
+                    }
+                    // Handle the wall case
+                    if let Some(wrap_dest) = wrap_dest {
+                        match &mut new_map[wrap_dest] {
                                 x @ Cell::Floor => *x = Cell::Blizzards(vec![*blizzard]),
                                 Cell::Blizzards(b) => b.push(*blizzard),
                                 Cell::Wall => unreachable!("No walls within the box. Blizzard should wrap to a non-wall location."),
                             }
-                        }
                     }
                 }
             }
-
-            // Cache result before returning
-            let old_map = core::mem::replace(&mut self.map, new_map);
-            self.cache.borrow_mut().insert(old_map, self.map.clone());
-            Some(self.map.clone())
         }
+
+        new_map
     }
 
     /// Wraps `Pos` with a counter so the neighbor function in astar knows what the state of the map is for `next_states`
@@ -309,7 +261,7 @@ mod parse {
 mod part1 {
     use super::*;
     use crate::{
-        data::{end, start, ChronoMap, DisplayMap, Round},
+        data::{end, next_map, start, Round},
         parse::parse_input,
     };
     use advent_lib::{algorithms, parse::read_and_leak};
@@ -318,8 +270,8 @@ mod part1 {
         let input = read_and_leak(file_name)?;
         let map = parse_input(input)?;
         let (start, end) = (start(&map).expect("start"), end(&map).expect("end"));
-        let minute_zero = ChronoMap::new(map);
-        let mut cached = vec![minute_zero.clone().next().expect("infinite iter")];
+        // The nth index indicates the next map for the nth state
+        let mut cached_next = vec![next_map(&map)];
         let starting_round = Round {
             pos: start,
             counter: 0,
@@ -333,24 +285,10 @@ mod part1 {
             starting_round,
             ending_round,
             |x| {
-                while cached.len() - 1 < x.counter {
-                    cached.push(
-                        ChronoMap::new(cached.last().expect("nonempty").clone())
-                            .next()
-                            .expect("infinite iter"),
-                    )
+                while cached_next.len() <= x.counter {
+                    cached_next.push(next_map(cached_next.last().expect("nonempty")))
                 }
-                let next_map = &cached[x.counter];
-                if x.counter % 10 == 0 {
-                    println!(
-                        "{x:?}:{}:\n{}",
-                        x.pos.manhattan_distance(&end),
-                        DisplayMap {
-                            map: next_map,
-                            elf: &x.pos
-                        }
-                    );
-                }
+                let next_map = &cached_next[x.counter];
                 x.next_states(next_map).collect::<Vec<_>>().into_iter()
             },
             |x| x.pos.manhattan_distance(&end),
