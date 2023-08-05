@@ -1,12 +1,13 @@
 use std::error::Error;
 
 mod data {
-    use advent_lib::{cord::NDCord, dbc, dir::Dir};
+    use advent_lib::{cord::NDCord, dir::Dir};
     use ndarray::{Array2, Axis};
     use std::{
         cell::RefCell,
-        collections::{HashMap, HashSet},
+        collections::HashMap,
         fmt::{Debug, Display},
+        hash::Hash,
         iter,
         rc::Rc,
     };
@@ -65,11 +66,23 @@ mod data {
         }
     }
 
-    impl Display for ChronoMap {
+    /// Knows how to format a map. Clunky way to get a function that formats with these args.
+    pub struct DisplayMap<'a> {
+        pub map: &'a Map,
+        pub elf: &'a Pos,
+    }
+
+    impl<'a> Display for DisplayMap<'a> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             // Reverse axis because this iterates in logical order instead of lexicographical order
             for (idx, cell) in self.map.clone().reversed_axes().indexed_iter() {
-                std::fmt::Display::fmt(&cell, f)?;
+                if self.elf[0] == idx.1.try_into().unwrap()
+                    && self.elf[1] == idx.0.try_into().unwrap()
+                {
+                    write!(f, "E")?;
+                } else {
+                    std::fmt::Display::fmt(&cell, f)?;
+                }
                 if idx.1 == self.map.dim().0 - 1 {
                     writeln!(f)?;
                 }
@@ -78,13 +91,27 @@ mod data {
         }
     }
 
+    impl Display for ChronoMap {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            DisplayMap {
+                map: &self.map,
+                // Don't render elf
+                elf: &[-1, -1].into(),
+            }
+            .fmt(f)
+        }
+    }
+
     impl Iterator for ChronoMap {
         type Item = Map;
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            (usize::MAX, None)
+        }
 
         fn next(&mut self) -> Option<Self::Item> {
             // Check cache first
             if let Some(next) = self.cache.borrow().get(&self.map) {
-                dbg!("cached");
                 self.map = next.clone();
                 return Some(next.clone());
             }
@@ -149,39 +176,49 @@ mod data {
         }
     }
 
-    #[derive(Clone, Debug)]
+    /// Wraps `Pos` with a counter so the neighbor function in astar knows what the state of the map is for `next_states`
+    #[derive(Clone, Copy, Hash, Debug, Eq)]
     pub struct Round {
         pub pos: Pos,
-        pub counter: u32,
+        pub counter: usize,
+    }
+
+    impl PartialEq for Round {
+        /// Purposefully don't check counter when comparing so astar finds end based only on pos.
+        /// Technically this is not consistent with the stated requirements of Hash but
+        /// this causes values in hash to be stored in different buckets locations depending on both
+        /// their position and the map's state (counter) when they get there while only checking the pos to terminate the search.
+        fn eq(&self, other: &Self) -> bool {
+            self.pos == other.pos
+        }
     }
 
     impl Round {
-        /// All possible next states
+        /// All possible next states.
         pub fn next_states<'a>(
             &'a self,
-            map: &'a Map,
+            next_map: &'a Map,
         ) -> impl Iterator<Item = Self> + Clone + Debug + 'a {
             iter::once(Action::Idle)
                 .chain(enum_iterator::all().map(Action::Dir))
-                .flat_map(|x| match x {
-                    Action::Idle => Some(Self {
+                .map(|x| match x {
+                    Action::Idle => Self {
                         counter: self.counter + 1,
                         ..self.clone()
-                    }),
-                    Action::Dir(d) => {
-                        let next = self.pos + d.to_velocity();
-                        if 0 < next[0]
-                            && next[0] < (map.dim().0 - 1).try_into().unwrap()
-                            && 0 < next[1]
-                            && next[1] < (map.dim().1 - 1).try_into().unwrap()
-                        {
-                            Some(Self {
-                                pos: next,
-                                counter: self.counter + 1,
-                            })
-                        } else {
-                            None
-                        }
+                    },
+                    Action::Dir(d) => Self {
+                        pos: self.pos + d.to_velocity(),
+                        counter: self.counter + 1,
+                    },
+                })
+                // Only keep moves that occupy a floor next round.
+                .filter(|x| {
+                    // Avoid converting signed to unsigned when negative. No signed positions in the map.
+                    if x.pos[0] < 0 || x.pos[1] < 0 {
+                        false
+                    } else {
+                        next_map.get(x.pos.map(|x| usize::try_from(x).unwrap()))
+                            == Some(&Cell::Floor)
                     }
                 })
         }
@@ -205,7 +242,7 @@ mod data {
                 if x == &Cell::Floor {
                     Some(Pos::from([
                         i.try_into().unwrap(),
-                        map.dim().1.try_into().unwrap(),
+                        (map.dim().1 - 1).try_into().unwrap(),
                     ]))
                 } else {
                     None
@@ -259,7 +296,6 @@ mod parse {
                 break;
             }
         }
-        advent_lib::dbc!(data.len(), rows, cols, &data);
         ArrayBase::from_shape_vec((cols, rows), data)
             .expect("Valid dimensions")
             .reversed_axes() // make x axis first number and y axis second number
@@ -273,26 +309,57 @@ mod parse {
 mod part1 {
     use super::*;
     use crate::{
-        data::{end, start, ChronoMap, Round},
+        data::{end, start, ChronoMap, DisplayMap, Round},
         parse::parse_input,
     };
-    use advent_lib::parse::read_and_leak;
+    use advent_lib::{algorithms, parse::read_and_leak};
 
     pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
         let input = read_and_leak(file_name)?;
         let map = parse_input(input)?;
         let (start, end) = (start(&map).expect("start"), end(&map).expect("end"));
-        let start = Round {
+        let minute_zero = ChronoMap::new(map);
+        let mut cached = vec![minute_zero.clone().next().expect("infinite iter")];
+        let starting_round = Round {
             pos: start,
             counter: 0,
         };
-        let mut chrono = ChronoMap::new(map);
-        for i in 0..100 {
-            eprintln!("{i}\n{chrono}");
-            chrono.next();
-        }
-
-        todo!()
+        let ending_round = Round {
+            pos: end,
+            // Ignored in Eq and everything else
+            counter: Default::default(),
+        };
+        let dist = algorithms::astar(
+            starting_round,
+            ending_round,
+            |x| {
+                while cached.len() - 1 < x.counter {
+                    cached.push(
+                        ChronoMap::new(cached.last().expect("nonempty").clone())
+                            .next()
+                            .expect("infinite iter"),
+                    )
+                }
+                let next_map = &cached[x.counter];
+                if x.counter % 10 == 0 {
+                    println!(
+                        "{x:?}:{}:\n{}",
+                        x.pos.manhattan_distance(&end),
+                        DisplayMap {
+                            map: next_map,
+                            elf: &x.pos
+                        }
+                    );
+                }
+                x.next_states(next_map).collect::<Vec<_>>().into_iter()
+            },
+            |x| x.pos.manhattan_distance(&end),
+            |_, _| 1,
+            false,
+        )
+        .expect("Some answer")
+        .0;
+        Ok(dist.try_into().unwrap())
     }
 }
 
@@ -312,12 +379,11 @@ mod tests {
         Ok(())
     }
 
-    //     #[test]
-    //     fn part1_ans() -> Result<(), Box<dyn Error>> {
-    //         assert!(part1::run("input.txt")? > 61338);
-    //         assert_eq!(part1::run("input.txt")?, 126350);
-    //         Ok(())
-    //     }
+    #[test]
+    fn part1_ans() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part1::run("input.txt")?, 281);
+        Ok(())
+    }
 
     //     #[test]
     //     fn test_part2() -> Result<(), Box<dyn Error>> {

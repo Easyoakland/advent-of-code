@@ -19,7 +19,7 @@ use std::{
 pub fn astar<Node, Distance, I>(
     start: Node,
     end: Node,
-    neighbors: impl Fn(Node) -> I,
+    mut neighbors: impl FnMut(Node) -> I,
     potential: impl Fn(Node) -> Distance,
     neighbor_edge_weight: impl Fn(Node, Node) -> Distance,
     reconstruct_path: bool,
@@ -69,7 +69,8 @@ where
 
         // If the end is reached return the distance to the end and the path.
         if cur_node == end {
-            return Some((distances[&end], backtrack.map(reconstruct_path)));
+            // Use `cur_node` instead of `end` to avoid missing key if hash(cur_node)!=hash(end) even though cur_node==end.
+            return Some((distances[&cur_node], backtrack.map(reconstruct_path)));
         }
 
         // Increase scope of neighbors to neighbors of `cur_node`
