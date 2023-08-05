@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 advent_lib = { version = "0.1.0", path = "../advent_lib" }
+enum-iterator = "1.4.1"
 ndarray = "0.15.6"
 yap = "0.11.0"

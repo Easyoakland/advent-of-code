@@ -10,9 +10,12 @@ use std::{
 /// Calculate the distance from start to end and optionally the shortest path between nodes if a path exists.
 /// # Notes
 /// - The potential function must not overestimate distance between nodes and must not be negative.
-/// - A potential of `|_| 0` is equivalent to Dijkstra
+/// - Edge weights must be positive.
+/// - A potential of `|_| 0` is equivalent to [Dijkstra](https://en.wikipedia.org/wiki/Dijkstra's_algorithm)
+/// - A neighbor edge weight of `|_, _| 1` is equivalent to unweighted graph.
 /// # Panics
 /// - Edge weights must be positive.
+/// - Negative potential.
 pub fn astar<Node, Distance, I>(
     start: Node,
     end: Node,

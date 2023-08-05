@@ -19,6 +19,7 @@ pub type Velocity<T> = NDCord<T, 2>;
     Ord,
     num_derive::FromPrimitive,
     num_derive::ToPrimitive,
+    enum_iterator::Sequence,
 )]
 pub enum Dir {
     Right = 0,
