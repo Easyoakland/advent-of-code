@@ -11,14 +11,15 @@ use std::{
 /// # Notes
 /// - The potential function must not overestimate distance between nodes and must not be negative.
 /// - Edge weights must be positive.
-/// - A potential of `|_| 0` is equivalent to [Dijkstra](https://en.wikipedia.org/wiki/Dijkstra's_algorithm)
+/// - A potential of `|_| 0` is equivalent to [Dijkstra](https://en.wikipedia.org/wiki/Dijkstra's_algorithm).
 /// - A neighbor edge weight of `|_, _| 1` is equivalent to unweighted graph.
+/// - An `end` of `|x| x == end_node` is equivalent to a unique ending node.
 /// # Panics
 /// - Edge weights must be positive.
 /// - Negative potential.
 pub fn astar<Node, Distance, I>(
     start: Node,
-    end: Node,
+    end: impl Fn(Node) -> bool,
     mut neighbors: impl FnMut(Node) -> I,
     potential: impl Fn(Node) -> Distance,
     neighbor_edge_weight: impl Fn(Node, Node) -> Distance,
@@ -40,8 +41,8 @@ where
         None
     };
     // Function to convert backtrack into a vector from start to end.
-    let reconstruct_path = |backtrack: HashMap<Node, Option<Node>>| -> Vec<Node> {
-        let mut current = end;
+    let reconstruct_path = |backtrack: HashMap<Node, Option<Node>>, end_node: Node| -> Vec<Node> {
+        let mut current = end_node;
         let mut out = Vec::new();
         while let Some(next) = backtrack[&current] {
             out.push(current);
@@ -68,9 +69,12 @@ where
         boundary_nodes.remove(&cur_node);
 
         // If the end is reached return the distance to the end and the path.
-        if cur_node == end {
+        if end(cur_node) {
             // Use `cur_node` instead of `end` to avoid missing key if hash(cur_node)!=hash(end) even though cur_node==end.
-            return Some((distances[&cur_node], backtrack.map(reconstruct_path)));
+            return Some((
+                distances[&cur_node],
+                backtrack.map(|backtrack| reconstruct_path(backtrack, cur_node)),
+            ));
         }
 
         // Increase scope of neighbors to neighbors of `cur_node`
@@ -159,7 +163,7 @@ mod test {
             }
         };
         assert_eq!(
-            astar(1, 4, neighbors, |x| 4 - x, |_, _| 1, true),
+            astar(1, |x| x == 4, neighbors, |x| 4 - x, |_, _| 1, true),
             Some((3, Some(vec![1, 2, 3, 4])))
         );
 
@@ -175,7 +179,7 @@ mod test {
             }
         };
         assert_eq!(
-            astar(1, 4, neighbors, |_| 0, |_, _| 1, true),
+            astar(1, |x| x == 4, neighbors, |_| 0, |_, _| 1, true),
             Some((2, Some(vec![1, 3, 4])))
         )
     }

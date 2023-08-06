@@ -129,20 +129,10 @@ mod data {
     }
 
     /// Wraps `Pos` with a counter so the neighbor function in astar knows what the state of the map is for `next_states`
-    #[derive(Clone, Copy, Hash, Debug, Eq)]
+    #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
     pub struct Round {
         pub pos: Pos,
         pub counter: usize,
-    }
-
-    impl PartialEq for Round {
-        /// Purposefully don't check counter when comparing so astar finds end based only on pos.
-        /// Technically this is not consistent with the stated requirements of Hash but
-        /// this causes values in hash to be stored in different buckets locations depending on both
-        /// their position and the map's state (counter) when they get there while only checking the pos to terminate the search.
-        fn eq(&self, other: &Self) -> bool {
-            self.pos == other.pos
-        }
     }
 
     impl Round {
@@ -271,14 +261,9 @@ mod shared {
             pos: start,
             counter: 0,
         };
-        let ending_round = Round {
-            pos: end,
-            // Ignored in Eq and everything else
-            counter: Default::default(),
-        };
         let dist = algorithms::astar(
             starting_round,
-            ending_round,
+            |x| x.pos == end,
             |x| {
                 while cached_next.len() <= x.counter {
                     cached_next.push(next_map(cached_next.last().expect("nonempty")))
