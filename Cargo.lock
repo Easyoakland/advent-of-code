@@ -55,6 +55,7 @@ dependencies = [
 name = "advent_14"
 version = "0.1.0"
 dependencies = [
+ "advent_lib",
  "itertools",
  "nom",
  "num",

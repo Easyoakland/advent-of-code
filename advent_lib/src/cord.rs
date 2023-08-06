@@ -307,6 +307,13 @@ impl<T, const DIM: usize> From<[T; DIM]> for NDCord<T, DIM> {
     }
 }
 
+impl<T, const DIM: usize> NDCord<T, DIM> {
+    /// Same as [`From`] impl but const.
+    pub const fn new(value: [T; DIM]) -> Self {
+        NDCord(value)
+    }
+}
+
 impl<T, const DIM: usize> From<NDCord<T, DIM>> for [T; DIM] {
     fn from(value: NDCord<T, DIM>) -> Self {
         value.0
