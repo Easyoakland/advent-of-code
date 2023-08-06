@@ -258,20 +258,15 @@ mod parse {
     }
 }
 
-mod part1 {
-    use super::*;
-    use crate::{
-        data::{end, next_map, start, Round},
-        parse::parse_input,
-    };
-    use advent_lib::{algorithms, parse::read_and_leak};
+mod shared {
+    use crate::data::{next_map, Map, Pos, Round};
+    use advent_lib::algorithms;
 
-    pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
-        let input = read_and_leak(file_name)?;
-        let map = parse_input(input)?;
-        let (start, end) = (start(&map).expect("start"), end(&map).expect("end"));
+    /// # Return
+    /// `(shortest_distance, final_map_state)`
+    pub fn shortest_dist(starting_map: &Map, start: Pos, end: Pos) -> (usize, Map) {
         // The nth index indicates the next map for the nth state
-        let mut cached_next = vec![next_map(&map)];
+        let mut cached_next = vec![next_map(starting_map)];
         let starting_round = Round {
             pos: start,
             counter: 0,
@@ -296,14 +291,51 @@ mod part1 {
             false,
         )
         .expect("Some answer")
-        .0;
-        Ok(dist.try_into().unwrap())
+        .0
+        .try_into()
+        .unwrap();
+        (dist, cached_next.last().expect("non-empty").clone())
+    }
+}
+
+mod part1 {
+    use super::*;
+    use crate::{
+        data::{end, start},
+        parse::parse_input,
+    };
+    use advent_lib::parse::read_and_leak;
+
+    pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
+        let input = read_and_leak(file_name)?;
+        let map = parse_input(input)?;
+        let (start, end) = (start(&map).expect("start"), end(&map).expect("end"));
+        Ok(shared::shortest_dist(&map, start, end).0)
+    }
+}
+
+mod part2 {
+    use super::*;
+    use crate::{
+        data::{end, start},
+        parse::parse_input,
+    };
+    use advent_lib::parse::read_and_leak;
+
+    pub fn run(file_name: &str) -> Result<usize, Box<dyn Error>> {
+        let input = read_and_leak(file_name)?;
+        let map = parse_input(input)?;
+        let (start, end) = (start(&map).expect("start"), end(&map).expect("end"));
+        let (dist_to_end, map) = shared::shortest_dist(&map, start, end);
+        let (dist_back_to_start, map) = shared::shortest_dist(&map, end, start);
+        let (dist_back_to_end, _) = shared::shortest_dist(&map, start, end);
+        Ok(dist_to_end + dist_back_to_start + dist_back_to_end)
     }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Part 1 answer: {:#?}", part1::run("input.txt")?);
-    // println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
+    println!("Part 2 answer: {:#?}", part2::run("input.txt")?);
     Ok(())
 }
 
@@ -323,15 +355,15 @@ mod tests {
         Ok(())
     }
 
-    //     #[test]
-    //     fn test_part2() -> Result<(), Box<dyn Error>> {
-    //         assert_eq!(part2::run("inputtest.txt")?, 5031);
-    //         Ok(())
-    //     }
+    #[test]
+    fn test_part2() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part2::run("inputtest.txt")?, 54);
+        Ok(())
+    }
 
-    //     #[test]
-    //     fn part2_ans() -> Result<(), Box<dyn Error>> {
-    //         assert_eq!(part2::run("input.txt")?, 129339);
-    //         Ok(())
-    //     }
+    #[test]
+    fn part2_ans() -> Result<(), Box<dyn Error>> {
+        assert_eq!(part2::run("input.txt")?, 807);
+        Ok(())
+    }
 }
