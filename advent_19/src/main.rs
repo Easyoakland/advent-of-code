@@ -47,7 +47,7 @@ mod part1 {
                 .map(|(id, quality_level)| id * usize::from(quality_level.unwrap()))
                 .sum();
 
-            unsafe { dbg!(data::CNT) };
+            dbg!(&data::CNT);
             ret
         })
     }
@@ -93,7 +93,7 @@ mod part2 {
                     .reduce(|acc, x| acc * x)
                     .expect("Non empty");
 
-            unsafe { dbg!(data::CNT) };
+            dbg!(&data::CNT);
             ret
         })
     }

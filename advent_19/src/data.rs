@@ -6,6 +6,7 @@ use std::{
     collections::{hash_map::DefaultHasher, BTreeMap},
     hash::{Hash, Hasher},
     rc::Rc,
+    sync::atomic::AtomicUsize,
 };
 
 #[derive(Clone, Copy, Debug, Default, Add, AddAssign, Sub, SubAssign, Mul, PartialEq, Eq, Hash)]
@@ -17,7 +18,7 @@ pub struct Resource {
 }
 
 const LOG: bool = false;
-pub static mut CNT: usize = 0;
+pub static CNT: AtomicUsize = AtomicUsize::new(0);
 
 impl PartialOrd for Resource {
     // Equal only if all resources are the same. If not equal:
@@ -187,7 +188,7 @@ pub fn best_case_geodes(round: &Round, last_minute: u8) -> u16 {
     }) }"#
 )]
 pub fn max_geodes(round: Round, last_minute: u8, best: Rc<Cell<u16>>) -> Option<u16> {
-    unsafe { CNT += 1 };
+    CNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     if round.minute >= last_minute {
         return Some(round.resources.geode.into());
     }
