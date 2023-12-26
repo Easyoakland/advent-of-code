@@ -1,0 +1,29 @@
+cabal-version:      3.0
+name:               advent-lib
+version:            0.1.0.0
+-- synopsis:
+-- homepage:
+-- license:
+-- author:
+-- maintainer:
+-- copyright:
+-- category:
+-- extra-source-files:
+
+common warnings
+    ghc-options: -Wall
+library
+    import: warnings
+    exposed-modules: AdventLib
+    -- other-modules:
+    -- other-extensions:
+    build-depends:    base ^>=4.17.2.0
+    hs-source-dirs:   src
+    default-language: Haskell2010
+
+test-suite advent-lib-test
+    default-language: Haskell2010
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          MyLibTest.hs
+    build-depends:    base ^>=4.17.2.0
